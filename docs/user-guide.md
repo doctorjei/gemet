@@ -26,13 +26,15 @@ The kernel configs live in `upstream/kernel/configs/fragments/`:
 To build:
 
 ```bash
-cd upstream/kernel
-./build-kernel.sh setup    # download source + apply patches
-./build-kernel.sh build    # compile
-./build-kernel.sh install  # install to /usr/share/kata-containers/
+# Setup + build in one step
+bash scripts/build-kernel.sh 6.12.8
+
+# Or separately
+bash scripts/build-kernel.sh 6.12.8 setup    # download source + apply patches
+bash scripts/build-kernel.sh 6.12.8 build    # compile
 ```
 
-Requirements: Go, yq v4.40.7, flex, bison, libelf-dev.
+Requirements: build-essential, flex, bison, bc, libelf-dev, libssl-dev.
 
 ### Initramfs
 
@@ -42,17 +44,27 @@ Tenkei replaces Kata's agent-based initramfs with a minimal one that:
 2. Runs `switch_root` to pivot into it
 3. Execs `/sbin/init` (systemd or whatever the container image provides)
 
-The entire initramfs is essentially:
+The init script (`initramfs/init`):
 
 ```sh
 #!/bin/sh
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
 mkdir -p /newroot
 mount -t virtiofs rootfs /newroot
 exec switch_root /newroot /sbin/init
 ```
 
-Packaged with busybox for the mount/switch_root binaries, the initramfs is
-under 5 MB.
+To build:
+
+```bash
+bash initramfs/build.sh                              # default output
+bash initramfs/build.sh /path/to/tenkei-initramfs.img  # custom output path
+```
+
+Requirements: busybox-static (`apt install busybox-static`).
+Packaged with busybox, the initramfs is under 5 MB.
 
 ### virtiofsd
 
@@ -72,7 +84,28 @@ layers that kento uses for LXC containers.
 
 ## Usage
 
-### Boot a VM from an OCI image
+### Quick start
+
+```bash
+# 1. Build the initramfs
+bash initramfs/build.sh
+
+# 2. Build a kernel
+bash scripts/build-kernel.sh 6.12.8
+
+# 3. Create a test rootfs
+sudo debootstrap --variant=minbase bookworm /tmp/test-rootfs
+
+# 4. Boot it (handles virtiofsd + QEMU automatically)
+bash scripts/test-boot.sh \
+    --kernel /path/to/vmlinuz \
+    --initrd initramfs/tenkei-initramfs.img \
+    --rootfs /tmp/test-rootfs
+```
+
+Press Ctrl-A X to exit QEMU.
+
+### Manual boot (without test-boot.sh)
 
 ```bash
 # 1. Compose the rootfs (using kento or manual overlayfs)
@@ -138,7 +171,7 @@ To add or remove kernel features:
 
 1. Edit or add a fragment in `upstream/kernel/configs/fragments/common/`
 2. For arch-specific options, use `upstream/kernel/configs/fragments/x86_64/`
-3. Rebuild with `./build-kernel.sh setup && ./build-kernel.sh build`
+3. Rebuild with `bash scripts/build-kernel.sh <version>`
 
 ## Troubleshooting
 
