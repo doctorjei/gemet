@@ -135,6 +135,13 @@ if [[ "$use_kvm" == "true" ]]; then
     }
 fi
 
+# virtiofsd creates the socket and QEMU connects to it. Both must run
+# as the same user or the socket permissions won't match. If the rootfs
+# is owned by root (e.g., from debootstrap), virtiofsd needs root too.
+if [[ "$(stat -c %u "$rootfs")" == "0" && "$(id -u)" != "0" ]]; then
+    warn "Rootfs is owned by root. You may need to run this script with sudo."
+fi
+
 # ─── Start virtiofsd ──────────────────────────────────────────────
 
 SOCKET_PATH="/tmp/tenkei-vfs-$$.sock"
