@@ -76,6 +76,8 @@ chmod +x "${STAGING}/bin/busybox"
 (
     cd "$STAGING"
     for applet in $(bin/busybox --list); do
+        # Skip busybox itself — don't overwrite the real binary with a symlink
+        [[ "$applet" == "busybox" ]] && continue
         # Place common applets in the right directories
         case "$applet" in
             mount|umount|switch_root|pivot_root|mdev)
