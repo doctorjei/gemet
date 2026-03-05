@@ -19,12 +19,29 @@
 #
 #   # 3. Create a test rootfs
 #   sudo debootstrap --variant=minbase bookworm /tmp/test-rootfs
+#   sudo chroot /tmp/test-rootfs apt install -y udev systemd-sysv
+#   sudo chroot /tmp/test-rootfs systemctl enable systemd-networkd \
+#       serial-getty@ttyS0.service
+#   sudo chroot /tmp/test-rootfs bash -c \
+#       'echo root:test | chpasswd'
+#   sudo mkdir -p /tmp/test-rootfs/etc/systemd/network
+#   cat <<'EOF' | sudo tee /tmp/test-rootfs/etc/systemd/network/80-dhcp.network
+#   [Match]
+#   Type=ether
 #
-#   # 4. Boot it
+#   [Network]
+#   DHCP=yes
+#   EOF
+#   echo "nameserver 10.0.2.3" | sudo tee /tmp/test-rootfs/etc/resolv.conf
+#
+#   # 4. Boot it (networking + SSH forwarding enabled by default)
 #   bash scripts/test-boot.sh \
 #       --kernel /path/to/vmlinuz \
 #       --initrd initramfs/tenkei-initramfs.img \
 #       --rootfs /tmp/test-rootfs
+#
+#   # 5. SSH in from another terminal
+#   ssh -p 2222 root@127.0.0.1
 #
 # Requirements:
 #   - qemu-system-x86_64
@@ -49,11 +66,14 @@ Options:
   -r, --rootfs <dir>    Path to rootfs directory to serve via virtiofs
   -m, --memory <size>   VM memory in MB (default: 512)
       --no-kvm          Disable KVM (slow, but works without /dev/kvm)
+      --no-net          Disable networking
+      --ssh-port <port> Host port forwarded to guest SSH (default: 2222)
   -h, --help            Show this help
 
 The script starts virtiofsd in the background and cleans it up on exit.
-Serial console is connected to the terminal (-nographic).
-Press Ctrl-A X to exit QEMU.
+Networking uses QEMU user-mode (SLIRP): guest gets 10.0.2.x via NAT.
+SSH is forwarded to localhost:2222 by default. Rootfs needs DHCP configured
+(see quick-start above). Serial console: -nographic. Press Ctrl-A X to exit.
 USAGE
     exit "${1:-0}"
 }
@@ -99,6 +119,8 @@ initrd=""
 rootfs=""
 memory=512
 use_kvm=true
+use_net=true
+ssh_port=2222
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -107,6 +129,8 @@ while [[ $# -gt 0 ]]; do
         -r|--rootfs)  rootfs="$2"; shift 2 ;;
         -m|--memory)  memory="$2"; shift 2 ;;
         --no-kvm)     use_kvm=false; shift ;;
+        --no-net)     use_net=false; shift ;;
+        --ssh-port)   ssh_port="$2"; shift 2 ;;
         -h|--help)    usage 0 ;;
         *)            error "Unknown option: $1" ;;
     esac
@@ -170,11 +194,23 @@ if [[ "$use_kvm" == "true" ]]; then
     kvm_args="-enable-kvm -cpu host"
 fi
 
+net_args=""
+if [[ "$use_net" == "true" ]]; then
+    net_args="-netdev user,id=net0,hostfwd=tcp:127.0.0.1:${ssh_port}-:22"
+    net_args+=" -device virtio-net-pci,netdev=net0"
+fi
+
 info "Launching QEMU..."
 info "  Kernel:  ${kernel}"
 info "  Initrd:  ${initrd}"
 info "  Memory:  ${memory}M"
 info "  KVM:     ${use_kvm}"
+if [[ "$use_net" == "true" ]]; then
+    info "  Network: user-mode (SLIRP), guest 10.0.2.x"
+    info "  SSH:     ssh -p ${ssh_port} root@127.0.0.1"
+else
+    info "  Network: disabled"
+fi
 info ""
 info "Press Ctrl-A X to exit QEMU."
 info ""
@@ -185,6 +221,7 @@ qemu-system-x86_64 \
     -initrd "$initrd" \
     -m "$memory" \
     ${kvm_args} \
+    ${net_args} \
     -nographic \
     -chardev "socket,id=vfs,path=${SOCKET_PATH}" \
     -device "vhost-user-fs-pci,chardev=vfs,tag=rootfs" \
