@@ -67,9 +67,9 @@ create_shims() {
 # Provides minimal stubs so upstream build-kernel.sh can run standalone.
 
 die()  { echo "ERROR: $*" >&2; exit 1; }
-info() { echo "INFO: $*"; }
+info() { echo "INFO: $*" >&2; }
 OK()   { echo "[OK] $*" >&2; }
-warning() { echo "WARNING: $*"; }
+warning() { echo "WARNING: $*" >&2; }
 
 check_program() { type "$1" >/dev/null 2>&1; }
 
