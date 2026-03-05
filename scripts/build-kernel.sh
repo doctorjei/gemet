@@ -10,11 +10,16 @@
 #   build-kernel.sh <version> [setup|build|install]
 #   build-kernel.sh 6.12.8 setup    — download and configure kernel source
 #   build-kernel.sh 6.12.8 build    — build the kernel
-#   build-kernel.sh 6.12.8          — setup + build (default)
+#   build-kernel.sh 6.12.8 install  — copy vmlinuz + initramfs to build/
+#   build-kernel.sh 6.12.8          — setup + build + install (default)
+#
+# The install step also builds the initramfs if it doesn't exist yet.
+# Output goes to build/ in the repo root:
+#   build/vmlinuz              — compressed kernel
+#   build/tenkei-initramfs.img — initramfs with busybox + virtiofs init
 #
 # Environment:
 #   KERNEL_ARCH     — target architecture (default: x86_64)
-#   KERNEL_OUTPUT   — where to place built vmlinuz (default: auto)
 #   BUILD_JOBS      — parallel make jobs (default: nproc)
 #
 # Build dependencies (Debian/Ubuntu):
@@ -38,14 +43,20 @@ Usage: build-kernel.sh <version> [setup|build|install]
 
 Arguments:
   version   Kernel version (e.g., 6.12.8, 6.1.75)
-  command   setup, build, or install (default: setup + build)
+  command   setup  — download and configure kernel source
+            build  — compile the kernel
+            install — copy vmlinuz + initramfs to build/
+            (default: setup + build + install)
 
-Environment:
-  KERNEL_ARCH     Target architecture (default: x86_64)
-  BUILD_JOBS      Parallel make jobs (default: nproc)
+Output (after install):
+  build/vmlinuz              Compressed kernel image
+  build/tenkei-initramfs.img Initramfs (busybox + virtiofs init)
+
+Note: run all steps from the same directory — the kernel source is
+placed at $PWD/kata-linux-<version>-<config> by the upstream script.
 
 Build dependencies (Debian/Ubuntu):
-  apt install build-essential flex bison bc libelf-dev libssl-dev
+  apt install build-essential flex bison bc libelf-dev libssl-dev busybox-static
 USAGE
     exit 1
 }
@@ -113,6 +124,43 @@ SHIMPATCH
     chmod +x "${shim_dir}/apply_patches.sh"
 }
 
+# ─── Install artifacts ─────────────────────────────────────────────
+
+install_tenkei() {
+    local ver="$1"
+    local karch="$2"
+    local config_version
+    config_version="$(cat "${UPSTREAM_KERNEL}/kata_config_version")"
+
+    local kernel_path="${PWD}/kata-linux-${ver}-${config_version}"
+    local build_dir="${REPO_ROOT}/build"
+
+    # Find bzImage
+    local bzimage="${kernel_path}/arch/x86/boot/bzImage"
+    if [[ "$karch" == "aarch64" || "$karch" == "arm64" ]]; then
+        bzimage="${kernel_path}/arch/arm64/boot/Image.gz"
+    fi
+    [[ -f "$bzimage" ]] || error "Kernel not found: ${bzimage}\n" \
+        "Run 'build-kernel.sh ${ver} build' first."
+
+    # Build initramfs if needed
+    local initramfs="${REPO_ROOT}/initramfs/tenkei-initramfs.img"
+    if [[ ! -f "$initramfs" ]]; then
+        info "Building initramfs..."
+        bash "${REPO_ROOT}/initramfs/build.sh"
+    fi
+    [[ -f "$initramfs" ]] || error "Initramfs not found: ${initramfs}"
+
+    # Copy to build/
+    mkdir -p "$build_dir"
+    cp "$bzimage" "${build_dir}/vmlinuz"
+    cp "$initramfs" "${build_dir}/tenkei-initramfs.img"
+
+    info "Installed to ${build_dir}/"
+    info "  vmlinuz              $(du -h "${build_dir}/vmlinuz" | cut -f1)"
+    info "  tenkei-initramfs.img $(du -h "${build_dir}/tenkei-initramfs.img" | cut -f1)"
+}
+
 # ─── Main ──────────────────────────────────────────────────────────
 
 [[ $# -ge 1 ]] || usage
@@ -170,9 +218,7 @@ case "$subcmd" in
             -v "$version" -a "$arch" build
         ;;
     install)
-        info "Installing kernel..."
-        bash "${UPSTREAM_KERNEL}/build-kernel.sh" \
-            -v "$version" -a "$arch" install
+        install_tenkei "$version" "$arch"
         ;;
     all)
         info "Setting up kernel source..."
@@ -181,6 +227,7 @@ case "$subcmd" in
         info "Building kernel..."
         bash "${UPSTREAM_KERNEL}/build-kernel.sh" \
             -v "$version" -a "$arch" build
+        install_tenkei "$version" "$arch"
         ;;
     *)
         usage
