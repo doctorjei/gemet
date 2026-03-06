@@ -93,14 +93,28 @@ apt install build-essential flex bison bc libelf-dev libssl-dev busybox-static
 # 1. Create a test rootfs
 sudo debootstrap --variant=minbase bookworm /tmp/test-rootfs
 sudo chroot /tmp/test-rootfs apt install -y udev systemd-sysv
+sudo chroot /tmp/test-rootfs systemctl enable systemd-networkd \
+    serial-getty@ttyS0.service
+sudo chroot /tmp/test-rootfs bash -c 'echo root:test | chpasswd'
 
-# 2. Boot it
+# 2. Enable DHCP (QEMU user-mode networking gives the guest 10.0.2.x)
+sudo mkdir -p /tmp/test-rootfs/etc/systemd/network
+cat <<'EOF' | sudo tee /tmp/test-rootfs/etc/systemd/network/80-dhcp.network
+[Match]
+Type=ether
+
+[Network]
+DHCP=yes
+EOF
+echo "nameserver 10.0.2.3" | sudo tee /tmp/test-rootfs/etc/resolv.conf
+
+# 3. Boot it
 sudo bash scripts/test-boot.sh \
     --kernel build/vmlinuz \
     --initrd build/tenkei-initramfs.img \
     --rootfs /tmp/test-rootfs
 
-# 3. SSH in (from another terminal)
+# 4. SSH in (from another terminal)
 ssh -p 2222 root@127.0.0.1
 ```
 
