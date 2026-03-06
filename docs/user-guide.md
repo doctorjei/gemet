@@ -26,15 +26,20 @@ The kernel configs live in `upstream/kernel/configs/fragments/`:
 To build:
 
 ```bash
-# Setup + build in one step
+# Setup + build + install in one step (output goes to build/)
 bash scripts/build-kernel.sh 6.12.8
 
 # Or separately
 bash scripts/build-kernel.sh 6.12.8 setup    # download source + apply patches
 bash scripts/build-kernel.sh 6.12.8 build    # compile
+bash scripts/build-kernel.sh 6.12.8 install  # copy vmlinuz + initramfs to build/
 ```
 
-Requirements: build-essential, flex, bison, bc, libelf-dev, libssl-dev.
+Output:
+- `build/vmlinuz` -- compressed kernel (~7.5 MB)
+- `build/tenkei-initramfs.img` -- initramfs (~1.1 MB)
+
+Requirements: build-essential, flex, bison, bc, libelf-dev, libssl-dev, busybox-static.
 
 ### Initramfs
 
@@ -64,7 +69,7 @@ bash initramfs/build.sh /path/to/tenkei-initramfs.img  # custom output path
 ```
 
 Requirements: busybox-static (`apt install busybox-static`).
-Packaged with busybox, the initramfs is under 5 MB.
+Packaged with busybox, the initramfs is about 1.1 MB.
 
 ### virtiofsd
 
@@ -87,20 +92,33 @@ layers that kento uses for LXC containers.
 ### Quick start
 
 ```bash
-# 1. Build the initramfs
-bash initramfs/build.sh
-
-# 2. Build a kernel
+# 1. Build kernel + initramfs
 bash scripts/build-kernel.sh 6.12.8
 
-# 3. Create a test rootfs
+# 2. Create a test rootfs with networking
 sudo debootstrap --variant=minbase bookworm /tmp/test-rootfs
+sudo chroot /tmp/test-rootfs apt install -y udev systemd-sysv
+sudo chroot /tmp/test-rootfs systemctl enable systemd-networkd \
+    serial-getty@ttyS0.service
+sudo chroot /tmp/test-rootfs bash -c 'echo root:test | chpasswd'
+sudo mkdir -p /tmp/test-rootfs/etc/systemd/network
+cat <<'EOF' | sudo tee /tmp/test-rootfs/etc/systemd/network/80-dhcp.network
+[Match]
+Type=ether
 
-# 4. Boot it (handles virtiofsd + QEMU automatically)
-bash scripts/test-boot.sh \
-    --kernel /path/to/vmlinuz \
-    --initrd initramfs/tenkei-initramfs.img \
+[Network]
+DHCP=yes
+EOF
+echo "nameserver 10.0.2.3" | sudo tee /tmp/test-rootfs/etc/resolv.conf
+
+# 3. Boot it (handles virtiofsd + QEMU + networking automatically)
+sudo bash scripts/test-boot.sh \
+    --kernel build/vmlinuz \
+    --initrd build/tenkei-initramfs.img \
     --rootfs /tmp/test-rootfs
+
+# 4. SSH in from another terminal
+ssh -p 2222 root@127.0.0.1
 ```
 
 Press Ctrl-A X to exit QEMU.
@@ -118,13 +136,15 @@ virtiofsd \
 
 # 3. Boot the VM
 qemu-system-x86_64 \
-    -kernel /path/to/vmlinuz \
-    -initrd /path/to/initramfs.img \
+    -kernel build/vmlinuz \
+    -initrd build/tenkei-initramfs.img \
     -m 512 -cpu host -enable-kvm \
     -chardev socket,id=vfs,path=/tmp/vfs.sock \
     -device vhost-user-fs-pci,chardev=vfs,tag=rootfs \
     -object memory-backend-memfd,id=mem,size=512M,share=on \
     -numa node,memdev=mem \
+    -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 \
+    -device virtio-net-pci,netdev=net0 \
     -nographic \
     -append "console=ttyS0 rootfstype=virtiofs root=rootfs"
 ```
