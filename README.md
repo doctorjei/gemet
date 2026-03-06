@@ -4,7 +4,7 @@ Minimal VM kernel and initramfs for booting OCI container images as virtual mach
 
 Tenkei provides the missing link between OCI images and lightweight VMs: a stripped-down
 Linux kernel and initramfs that boots into a container rootfs served over virtiofs from
-the host. No disk images, no image conversion — the same Podman layer store that
+the host. No disk images, no image conversion -- the same Podman layer store that
 [kento](https://github.com/doctorjei/kento) uses for LXC containers can also back
 full virtual machines.
 
@@ -12,79 +12,121 @@ full virtual machines.
 
 ```
 Host                              VM
-┌──────────────────┐    ┌─────────────────────┐
-│ Podman layer     │    │ tenkei kernel       │
-│ store            │    │   + initramfs       │
-│   │              │    │     │               │
-│   ▼              │    │     ▼               │
-│ virtiofsd ──────────────► mount -t virtiofs │
-│ (shares rootfs)  │    │     │               │
-│                  │    │     ▼               │
-│                  │    │   switch_root       │
-│                  │    │     │               │
-│                  │    │     ▼               │
-│                  │    │   /sbin/init        │
-└──────────────────┘    └─────────────────────┘
++-----------------+    +---------------------+
+| Podman layer    |    | tenkei kernel       |
+| store           |    |   + initramfs       |
+|   |             |    |     |               |
+|   v             |    |     v               |
+| virtiofsd -----------------> virtiofs mount |
+| (shares rootfs) |    |     |               |
+|                 |    |     v               |
+|                 |    |   switch_root       |
+|                 |    |     |               |
+|                 |    |     v               |
+|                 |    |   /sbin/init        |
++-----------------+    +---------------------+
 ```
 
 1. **Host** runs `virtiofsd`, sharing the OCI rootfs (composed from Podman layers)
 2. **QEMU/KVM** boots the tenkei kernel with the initramfs
 3. **Initramfs** mounts the virtiofs share as the root filesystem
-4. **`switch_root`** pivots into the container rootfs and execs init
+4. **`switch_root`** pivots into the container rootfs and execs `/sbin/init`
 
-The VM boots in under a second with minimal memory overhead. The rootfs is shared
-from the host — no disk image to create, convert, or resize.
+The VM boots in about 5 seconds with minimal memory overhead. The rootfs is shared
+from the host -- no disk image to create, convert, or resize.
+
+## Relationship to Kata Containers
+
+Tenkei borrows kernel configs and build tooling from
+[Kata Containers](https://github.com/kata-containers/kata-containers), but the
+two projects solve different problems:
+
+**What Kata does:**
+- Full container runtime (`kata-runtime`) integrated with containerd/Kubernetes
+- Runs a Go agent (`kata-agent`) inside the VM that receives gRPC commands
+- The VM is a sandbox for OCI containers -- the host orchestrates everything
+
+**What tenkei does:**
+- No runtime, no agent, no containerd dependency
+- The initramfs is 6 lines of shell: mount virtiofs, switch_root, done
+- The VM boots directly into the OCI image's own init -- it IS the machine
+- Lifecycle management is handled by [kento](https://github.com/doctorjei/kento)
+
+**What tenkei takes from Kata:**
+- Kernel config fragments (virtio, virtiofs, networking, cgroups, etc.)
+- Kernel patches for various versions
+- The kernel build script (wrapped for standalone use)
+
+**What tenkei replaces:**
+- `kata-agent` -- replaced by a ~6-line shell init script
+- `kata-runtime` -- replaced by kento's VM management
+- containerd shim -- not needed; kento talks to QEMU directly
+
+The upstream Kata code lives in `upstream/` as git subtrees and is never
+modified directly. Tenkei's own code wraps or overrides it as needed.
+
+## Quick Start
+
+### Build
+
+```bash
+# Build kernel + initramfs (output goes to build/)
+bash scripts/build-kernel.sh 6.12.8
+```
+
+This downloads the kernel source, configures it with Kata's config fragments,
+compiles it, builds the initramfs, and copies both to `build/`:
+
+```
+build/vmlinuz              -- compressed kernel (~7.5 MB)
+build/tenkei-initramfs.img -- initramfs (~1.1 MB)
+```
+
+Build dependencies (Debian/Ubuntu):
+```bash
+apt install build-essential flex bison bc libelf-dev libssl-dev busybox-static
+```
+
+### Boot Test
+
+```bash
+# 1. Create a test rootfs
+sudo debootstrap --variant=minbase bookworm /tmp/test-rootfs
+sudo chroot /tmp/test-rootfs apt install -y udev systemd-sysv
+
+# 2. Boot it
+sudo bash scripts/test-boot.sh \
+    --kernel build/vmlinuz \
+    --initrd build/tenkei-initramfs.img \
+    --rootfs /tmp/test-rootfs
+
+# 3. SSH in (from another terminal)
+ssh -p 2222 root@127.0.0.1
+```
+
+The test script handles virtiofsd, QEMU, networking, and cleanup automatically.
+Run `bash scripts/test-boot.sh --help` for all options.
 
 ## Project Structure
 
 ```
 tenkei/
-├── scripts/
-│   └── git-upstream.sh       # Sync upstream kata-containers subtrees
-├── upstream/
-│   ├── kernel/               # Kata kernel build scripts + configs
-│   └── osbuilder/            # Kata rootfs/initrd/image builders
-├── initramfs/                # Tenkei's own minimal initramfs (TODO)
-├── docs/
-│   └── user-guide.md         # Usage documentation
-└── playbook/
-    └── devnotes.md           # Development notes and design decisions
-```
-
-## Quick Start
-
-> **Status**: Early development. The upstream subtrees are imported; the custom
-> initramfs and build pipeline are not yet implemented.
-
-Prerequisites: QEMU with KVM, virtiofsd, Podman.
-
-```bash
-# Build the kernel (using upstream kata tooling)
-cd upstream/kernel
-./build-kernel.sh setup
-./build-kernel.sh build
-
-# Build the initramfs (TODO — tenkei's own minimal init)
-# ...
-
-# Boot a VM with an OCI rootfs
-virtiofsd --socket-path=/tmp/vfs.sock --shared-dir=/path/to/rootfs &
-qemu-system-x86_64 \
-    -kernel vmlinuz \
-    -initrd initramfs.img \
-    -m 512 -cpu host -enable-kvm \
-    -chardev socket,id=vfs,path=/tmp/vfs.sock \
-    -device vhost-user-fs-pci,chardev=vfs,tag=rootfs \
-    -object memory-backend-memfd,id=mem,size=512M,share=on \
-    -numa node,memdev=mem \
-    -append "rootfstype=virtiofs root=rootfs"
++-- initramfs/
+|   +-- init                 # 6-line virtiofs mount + switch_root
+|   +-- build.sh             # Packages initramfs (busybox + init)
++-- scripts/
+|   +-- build-kernel.sh      # Kernel build wrapper (setup/build/install)
+|   +-- test-boot.sh         # QEMU + virtiofsd boot test helper
+|   +-- git-upstream.sh      # Manage upstream kata subtree imports
++-- upstream/
+|   +-- kernel/              # Kata kernel configs, patches, build script
+|   +-- osbuilder/           # Kata rootfs/initrd/image builders
++-- build/                   # Output: vmlinuz + initramfs (gitignored)
 ```
 
 ## Upstream Sync
 
-Tenkei imports kernel configs and build tooling from the
-[kata-containers](https://github.com/kata-containers/kata-containers) monorepo
-as git subtrees. To pull the latest upstream changes:
+Kata code is imported as git subtrees under `upstream/`. To pull latest:
 
 ```bash
 bash scripts/git-upstream.sh pull
@@ -94,10 +136,11 @@ See `bash scripts/git-upstream.sh --help` for all commands.
 
 ## Related Projects
 
-- [kento](https://github.com/doctorjei/kento) — OCI images as LXC system containers
-- [droste](https://github.com/doctorjei/droste) — Nested-virtualization VM images for infrastructure testing
-- [Kata Containers](https://github.com/kata-containers/kata-containers) — Secure container runtime using lightweight VMs
+- [kento](https://github.com/doctorjei/kento) -- OCI images as LXC system containers (tenkei's counterpart for VMs)
+- [droste](https://github.com/doctorjei/droste) -- Nested-virtualization VM images for infrastructure testing
+- [Kata Containers](https://github.com/kata-containers/kata-containers) -- Secure container runtime using lightweight VMs (upstream source for kernel configs)
 
 ## License
 
-TBD
+Upstream code in `upstream/` is from Kata Containers, licensed under Apache 2.0.
+Tenkei's own code license is TBD.
