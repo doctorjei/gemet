@@ -150,7 +150,7 @@ See `bash scripts/git-upstream.sh --help` for all commands.
 
 ## Related Projects
 
-- [kento](https://github.com/doctorjei/kento) -- OCI images as LXC system containers (tenkei's counterpart for VMs)
+- [kento](https://github.com/doctorjei/kento) -- OCI images as LXC containers and VMs (manages tenkei VM lifecycle)
 - [droste](https://github.com/doctorjei/droste) -- Nested-virtualization VM images for infrastructure testing
 - [Kata Containers](https://github.com/kata-containers/kata-containers) -- Secure container runtime using lightweight VMs (upstream source for kernel configs)
 

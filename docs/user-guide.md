@@ -151,15 +151,31 @@ qemu-system-x86_64 \
 
 ### Integration with kento
 
-When kento gains VM support, the workflow simplifies to:
+Kento provides full VM lifecycle management using tenkei's kernel and initramfs.
+The OCI image must include `/boot/vmlinuz` and `/boot/initramfs.img` (typically
+added by a droste image layer).
 
 ```bash
-kento create-vm myvm --image docker.io/library/debian:bookworm
-kento start myvm
+# Create a VM from an OCI image (--vm flag is required)
+sudo kento container create docker.io/example/myimage --vm --name myvm --port 2222:22
+
+# Start / stop / remove
+sudo kento container start myvm
+sudo kento container stop myvm
+sudo kento container rm myvm
+
+# List all containers (LXC and VM)
+sudo kento container list
 ```
 
-Kento handles the virtiofsd lifecycle, rootfs composition, and QEMU invocation
-internally.
+Kento handles everything automatically:
+- Composes the OCI layers into an overlayfs rootfs
+- Validates that `/boot/vmlinuz` and `/boot/initramfs.img` exist
+- Starts virtiofsd to share the rootfs with the guest
+- Launches QEMU/KVM with the correct virtiofs, networking, and console flags
+- Tracks PIDs and cleans up on stop (virtiofsd, QEMU, mounts, sockets)
+
+See the [kento VM mode docs](https://github.com/doctorjei/kento) for full details.
 
 ## Kernel Configuration
 
