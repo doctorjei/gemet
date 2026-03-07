@@ -177,6 +177,40 @@ Kento handles everything automatically:
 
 See the [kento VM mode docs](https://github.com/doctorjei/kento) for full details.
 
+### Building VM-bootable OCI images
+
+Kento expects the OCI image to contain tenkei's kernel and initramfs at
+`/boot/vmlinuz` and `/boot/initramfs.img`. The
+[droste](https://github.com/doctorjei/droste) project builds these images
+using Containerfiles that copy tenkei's build output into the image and
+configure the rootfs for VM boot.
+
+A minimal VM-bootable Containerfile looks like:
+
+```dockerfile
+FROM debian:bookworm
+
+# Install tenkei kernel + initramfs
+COPY vmlinuz /boot/vmlinuz
+COPY initramfs.img /boot/initramfs.img
+
+# VM boot requirements
+RUN > /etc/fstab \
+    && echo 'root:password' | chpasswd \
+    && apt-get update && apt-get install -y udev systemd-sysv \
+    && mkdir -p /etc/systemd/network \
+    && printf '[Match]\nName=en*\n\n[Network]\nDHCP=yes\n' \
+       > /etc/systemd/network/80-dhcp.network \
+    && systemctl enable systemd-networkd
+```
+
+Key requirements for a VM-bootable image:
+- `/boot/vmlinuz` and `/boot/initramfs.img` present
+- Empty `/etc/fstab` (stale entries from base images hang on boot)
+- A user account with a password set (locked accounts can't login via console)
+- systemd-networkd with a DHCP `.network` file for virtio NICs
+- `udev` and `systemd-sysv` installed for full systemd boot
+
 ## Kernel Configuration
 
 ### Fragment system
