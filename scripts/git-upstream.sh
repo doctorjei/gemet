@@ -11,7 +11,7 @@
 #   git-upstream pull     — fetch + merge upstream changes
 #   git-upstream status   — show current upstream commit info
 #
-# Run from the root of your kento repository.
+# Run from the root of your tenkei repository.
 #
 set -euo pipefail
 
@@ -27,13 +27,13 @@ declare -A SUBTREES=(
     [upstream/kernel]="tools/packaging/kernel"
 )
 
-CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/kento-upstream"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tenkei-upstream"
 CLONE_DIR="${CACHE_DIR}/kata-containers"
 
 # ─── Helpers ───────────────────────────────────────────────────────
 
 info()  { echo -e "\033[1;34m>>>\033[0m $*"; }
-warn()  { echo -e "\033[1;33mWARN:\033[0m $*"; }
+warn()  { echo -e "\033[1;33mWARN:\033[0m $*" >&2; }
 error() { echo -e "\033[1;31mERROR:\033[0m $*" >&2; exit 1; }
 
 check_git_repo() {
@@ -219,13 +219,14 @@ Commands:
   pull     — fetch + merge upstream changes
   status   — show current upstream commit info
 USAGE
-    exit 1
+    exit "${1:-1}"
 }
 
 case "${1:-}" in
-    setup)  cmd_setup ;;
-    fetch)  cmd_fetch ;;
-    pull)   cmd_pull ;;
-    status) cmd_status ;;
-    *)      usage ;;
+    setup)      cmd_setup ;;
+    fetch)      cmd_fetch ;;
+    pull)       cmd_pull ;;
+    status)     cmd_status ;;
+    -h|--help)  usage 0 ;;
+    *)          usage ;;
 esac

@@ -34,7 +34,7 @@ UPSTREAM_KERNEL="${REPO_ROOT}/upstream/kernel"
 # ─── Helpers ───────────────────────────────────────────────────────
 
 info()  { echo -e "\033[1;34m>>>\033[0m $*"; }
-warn()  { echo -e "\033[1;33mWARN:\033[0m $*"; }
+warn()  { echo -e "\033[1;33mWARN:\033[0m $*" >&2; }
 error() { echo -e "\033[1;31mERROR:\033[0m $*" >&2; exit 1; }
 
 usage() {
@@ -112,9 +112,6 @@ fi
 
 for patch in "${patches[@]}"; do
     echo "INFO: Applying $(basename "$patch")"
-    git apply --check "$patch" 2>/dev/null || {
-        echo "WARN: Patch may not apply cleanly: $(basename "$patch")"
-    }
     git apply "$patch" || {
         echo "ERROR: Failed to apply $(basename "$patch")" >&2
         exit 1
@@ -140,8 +137,8 @@ install_tenkei() {
     if [[ "$karch" == "aarch64" || "$karch" == "arm64" ]]; then
         bzimage="${kernel_path}/arch/arm64/boot/Image.gz"
     fi
-    [[ -f "$bzimage" ]] || error "Kernel not found: ${bzimage}\n" \
-        "Run 'build-kernel.sh ${ver} build' first."
+    [[ -f "$bzimage" ]] || error "Kernel not found: ${bzimage}" \
+        "— run 'build-kernel.sh ${ver} build' first."
 
     # Build initramfs if needed
     local initramfs="${REPO_ROOT}/initramfs/tenkei-initramfs.img"
@@ -199,8 +196,10 @@ elif [[ ! -f "${shim_dir}/lib.sh" ]]; then
 fi
 
 cleanup() {
-    if [[ "$shim_created" == "true" && -d "$shim_dir" ]]; then
-        rm -rf "$shim_dir"
+    if [[ "$shim_created" == "true" ]]; then
+        rm -f "${shim_dir}/lib.sh" "${shim_dir}/apply_patches.sh"
+        # Remove the directory only if we created it (it was empty before us)
+        rmdir "$shim_dir" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT

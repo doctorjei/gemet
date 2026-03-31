@@ -22,7 +22,7 @@ DEFAULT_OUTPUT="${SCRIPT_DIR}/tenkei-initramfs.img"
 # ─── Helpers ───────────────────────────────────────────────────────
 
 info()  { echo -e "\033[1;34m>>>\033[0m $*"; }
-warn()  { echo -e "\033[1;33mWARN:\033[0m $*"; }
+warn()  { echo -e "\033[1;33mWARN:\033[0m $*" >&2; }
 error() { echo -e "\033[1;31mERROR:\033[0m $*" >&2; exit 1; }
 
 cleanup() {

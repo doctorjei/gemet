@@ -11,6 +11,9 @@ mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 
 mkdir -p /newroot
-mount -t virtiofs rootfs /newroot
+if ! mount -t virtiofs rootfs /newroot; then
+	echo "tenkei: virtiofs mount failed (tag=rootfs). Dropping to emergency shell."
+	exec /bin/sh
+fi
 
 exec switch_root /newroot /sbin/init
