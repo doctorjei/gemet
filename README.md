@@ -156,5 +156,7 @@ See `bash scripts/git-upstream.sh --help` for all commands.
 
 ## License
 
+Tenkei's own code is licensed under the GNU General Public License v3.0.
+See [LICENSE.md](LICENSE.md) for the full text.
+
 Upstream code in `upstream/` is from Kata Containers, licensed under Apache 2.0.
-Tenkei's own code license is TBD.
