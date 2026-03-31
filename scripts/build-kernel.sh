@@ -140,7 +140,8 @@ install_tenkei() {
     fi
 
     [[ -f "$bzimage" ]] || error "Kernel not found: ${bzimage}" \
-        "— run 'build-kernel.sh ${ver} build' first."
+        "— run 'build-kernel.sh ${ver} build' first." \
+        "Ensure all steps (setup, build, install) run from the same directory."
 
     # Build initramfs if needed
     local initramfs="${REPO_ROOT}/initramfs/tenkei-initramfs.img"
@@ -211,6 +212,10 @@ case "$subcmd" in
             -v "$version" -a "$arch" setup
         ;;
     build)
+        config_version="$(cat "${UPSTREAM_KERNEL}/kata_config_version")"
+        kernel_path="${PWD}/kata-linux-${version}-${config_version}"
+        [[ -d "$kernel_path" ]] || error "Kernel source not found: ${kernel_path}" \
+            "— did you run 'setup' from a different directory? All steps must run from the same CWD."
         info "Building kernel..."
         bash "${UPSTREAM_KERNEL}/build-kernel.sh" \
             -v "$version" -a "$arch" build
