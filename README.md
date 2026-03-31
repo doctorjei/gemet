@@ -62,8 +62,10 @@ two projects solve different problems:
 - `kata-runtime` -- replaced by kento's VM management
 - containerd shim -- not needed; kento talks to QEMU directly
 
-The upstream Kata code lives in `upstream/` as git subtrees and is never
-modified directly. Tenkei's own code wraps or overrides it as needed.
+The upstream Kata code lives in `upstream/` as git subtrees. Changes to these
+files are not committed — they are overwritten on the next upstream sync.
+Tenkei's own code wraps or overrides upstream behavior as needed. Local
+customization (e.g., kernel config fragments) is fine for personal builds.
 
 ## Quick Start
 
