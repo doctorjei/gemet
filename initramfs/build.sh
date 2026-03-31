@@ -56,6 +56,7 @@ find_busybox() {
 # ─── Main ──────────────────────────────────────────────────────────
 
 output="${1:-$DEFAULT_OUTPUT}"
+mkdir -p "$(dirname "$output")"
 output="$(cd "$(dirname "$output")" && pwd)/$(basename "$output")"
 
 busybox="$(find_busybox)"

@@ -53,7 +53,7 @@ Output (after install):
   build/tenkei-initramfs.img Initramfs (busybox + virtiofs init)
 
 Note: run all steps from the same directory — the kernel source is
-placed at $PWD/kata-linux-<version>-<config> by the upstream script.
+placed in the current working directory by the upstream script.
 
 Build dependencies (Debian/Ubuntu):
   apt install build-essential flex bison bc libelf-dev libssl-dev busybox-static
@@ -136,7 +136,9 @@ install_tenkei() {
     local bzimage="${kernel_path}/arch/x86/boot/bzImage"
     if [[ "$karch" == "aarch64" || "$karch" == "arm64" ]]; then
         bzimage="${kernel_path}/arch/arm64/boot/Image.gz"
+        warn "ARM64 kernel built — note that test-boot.sh only supports x86_64"
     fi
+
     [[ -f "$bzimage" ]] || error "Kernel not found: ${bzimage}" \
         "— run 'build-kernel.sh ${ver} build' first."
 
@@ -182,23 +184,20 @@ info "  Command: ${subcmd}"
 shim_dir="${UPSTREAM_KERNEL}/../scripts"
 shim_dir="$(cd "$(dirname "$shim_dir")" && pwd)/scripts"
 
-# Only create shims if the directory doesn't already exist
-# (don't clobber if user has their own)
-shim_created=false
+# Always (re)create shims to avoid stale files from interrupted runs.
+# Track whether we created the directory so cleanup knows what to remove.
+shim_dir_created=false
 if [[ ! -d "$shim_dir" ]]; then
-    info "Creating shim scripts in ${shim_dir}"
-    create_shims "$shim_dir"
-    shim_created=true
-elif [[ ! -f "${shim_dir}/lib.sh" ]]; then
-    info "Creating shim scripts in ${shim_dir}"
-    create_shims "$shim_dir"
-    shim_created=true
+    shim_dir_created=true
 fi
 
+info "Creating shim scripts in ${shim_dir}"
+create_shims "$shim_dir"
+
 cleanup() {
-    if [[ "$shim_created" == "true" ]]; then
-        rm -f "${shim_dir}/lib.sh" "${shim_dir}/apply_patches.sh"
-        # Remove the directory only if we created it (it was empty before us)
+    rm -f "${shim_dir}/lib.sh" "${shim_dir}/apply_patches.sh"
+    if [[ "$shim_dir_created" == "true" ]]; then
+        # Remove the directory only if we created it
         rmdir "$shim_dir" 2>/dev/null || true
     fi
 }

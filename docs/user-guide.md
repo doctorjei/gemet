@@ -129,7 +129,7 @@ Press Ctrl-A X to exit QEMU.
 # 1. Compose the rootfs (using kento or manual overlayfs)
 #    This produces a directory with the full container filesystem.
 
-# 2. Start virtiofsd on the host
+# 2. Start virtiofsd on the host (sudo may be needed if the rootfs is root-owned)
 virtiofsd \
     --socket-path=/tmp/vfs.sock \
     --shared-dir=/path/to/rootfs &
@@ -153,7 +153,8 @@ qemu-system-x86_64 \
 
 Kento provides full VM lifecycle management using tenkei's kernel and initramfs.
 The OCI image must include `/boot/vmlinuz` and `/boot/initramfs.img` (typically
-added by a droste image layer).
+added by a [droste](https://github.com/doctorjei/droste) image layer, where droste
+is the project's nested-virt VM image builder).
 
 ```bash
 # Create a VM from an OCI image (--vm flag is required)
@@ -199,7 +200,7 @@ RUN > /etc/fstab \
     && echo 'root:password' | chpasswd \
     && apt-get update && apt-get install -y udev systemd-sysv \
     && mkdir -p /etc/systemd/network \
-    && printf '[Match]\nName=en*\n\n[Network]\nDHCP=yes\n' \
+    && printf '[Match]\nType=ether\n\n[Network]\nDHCP=yes\n' \
        > /etc/systemd/network/80-dhcp.network \
     && systemctl enable systemd-networkd
 ```

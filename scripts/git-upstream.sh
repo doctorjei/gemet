@@ -105,7 +105,7 @@ cmd_setup() {
     check_git_repo
     ensure_clone
 
-    for local_prefix in "${!SUBTREES[@]}"; do
+    for local_prefix in $(printf '%s\n' "${!SUBTREES[@]}" | sort); do
         local upstream_path="${SUBTREES[$local_prefix]}"
         local branch_name="upstream/$(basename "$local_prefix")"
 
@@ -129,7 +129,7 @@ cmd_setup() {
     info "Setup complete."
     echo ""
     echo "Imported subtrees:"
-    for local_prefix in "${!SUBTREES[@]}"; do
+    for local_prefix in $(printf '%s\n' "${!SUBTREES[@]}" | sort); do
         echo "  ${SUBTREES[$local_prefix]} → ${local_prefix}"
     done
 }
@@ -154,7 +154,7 @@ cmd_pull() {
     check_git_repo
     ensure_clone
 
-    for local_prefix in "${!SUBTREES[@]}"; do
+    for local_prefix in $(printf '%s\n' "${!SUBTREES[@]}" | sort); do
         local upstream_path="${SUBTREES[$local_prefix]}"
         local branch_name="upstream/$(basename "$local_prefix")"
 
@@ -184,7 +184,7 @@ cmd_status() {
 
     echo "Subtree status:"
     echo ""
-    for local_prefix in "${!SUBTREES[@]}"; do
+    for local_prefix in $(printf '%s\n' "${!SUBTREES[@]}" | sort); do
         local upstream_path="${SUBTREES[$local_prefix]}"
         if [[ -d "$local_prefix" ]]; then
             local last_merge
