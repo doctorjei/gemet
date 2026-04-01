@@ -95,6 +95,7 @@ trap cleanup EXIT
 find_virtiofsd() {
     local candidates=(
         /usr/libexec/virtiofsd
+        /usr/lib/qemu/virtiofsd
         /usr/lib/virtiofsd
         /usr/bin/virtiofsd
     )
@@ -217,6 +218,7 @@ info ""
 
 # shellcheck disable=SC2086
 qemu-system-x86_64 \
+    -machine q35 \
     -kernel "$kernel" \
     -initrd "$initrd" \
     -m "$memory" \
