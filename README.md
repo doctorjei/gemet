@@ -48,7 +48,7 @@ two projects solve different problems:
 
 **What tenkei does:**
 - No runtime, no agent, no containerd dependency
-- The initramfs is 6 lines of shell: mount virtiofs, switch_root, done
+- The initramfs is a short shell script: mount virtiofs, switch_root, done
 - The VM boots directly into the OCI image's own init -- it IS the machine
 - Lifecycle management is handled by [kento](https://github.com/doctorjei/kento)
 
@@ -58,7 +58,7 @@ two projects solve different problems:
 - The kernel build script (wrapped for standalone use)
 
 **What tenkei replaces:**
-- `kata-agent` -- replaced by a ~6-line shell init script
+- `kata-agent` -- replaced by a minimal shell init script
 - `kata-runtime` -- replaced by kento's VM management
 - containerd shim -- not needed; kento talks to QEMU directly
 
@@ -128,15 +128,20 @@ Run `bash scripts/test-boot.sh --help` for all options.
 ```
 tenkei/
 +-- initramfs/
-|   +-- init                 # 6-line virtiofs mount + switch_root
+|   +-- init                 # Minimal virtiofs mount + switch_root
 |   +-- build.sh             # Packages initramfs (busybox + init)
 +-- scripts/
 |   +-- build-kernel.sh      # Kernel build wrapper (setup/build/install)
 |   +-- test-boot.sh         # QEMU + virtiofsd boot test helper
 |   +-- git-upstream.sh      # Manage upstream kata subtree imports
++-- docs/
+|   +-- user-guide.md        # Usage documentation
+|   +-- pve-integration-spec.md  # PVE config requirements for kento
 +-- upstream/
 |   +-- kernel/              # Kata kernel configs, patches, build script
 |   +-- osbuilder/           # Kata rootfs/initrd/image builders
++-- VERSION                  # Version string
++-- LICENSE.md               # GPLv3
 +-- build/                   # Output: vmlinuz + initramfs (gitignored)
 ```
 
