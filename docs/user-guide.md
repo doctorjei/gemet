@@ -221,6 +221,7 @@ Kata fragment system. Each feature area has its own config snippet:
 | `seccomp.conf` | Seccomp BPF |
 | `cgroup.conf` | Control groups |
 | `serial.conf` | Serial console |
+| `dax.conf` | DAX direct access for virtiofs |
 | `9p.conf` | 9p filesystem (fallback) |
 | `debug.conf` | Debug options (optional) |
 
