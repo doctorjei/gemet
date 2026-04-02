@@ -57,7 +57,7 @@ mount -t devtmpfs devtmpfs /dev
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 mkdir -p /newroot
-if ! mount -t virtiofs rootfs /newroot; then
+if ! mount -t virtiofs rootfs /newroot -o dax=inode; then
 	echo "tenkei: virtiofs mount failed (tag=rootfs). Dropping to emergency shell."
 	exec /bin/sh
 fi
@@ -248,6 +248,37 @@ To add or remove kernel features:
 ### Slow boot
 - Ensure `-enable-kvm` and `-cpu host` are passed to QEMU
 - Check that the host CPU supports hardware virtualization
+
+## DAX (Direct Access)
+
+virtiofs supports DAX for memory-mapped file access, which bypasses the FUSE
+request/response overhead. The tenkei kernel includes DAX support
+(`CONFIG_FUSE_DAX=y`), and the initramfs mounts with `dax=inode` (per-inode
+DAX, with graceful fallback when no DAX window is configured).
+
+To enable DAX in test-boot.sh:
+
+```bash
+sudo bash scripts/test-boot.sh \
+    --kernel build/vmlinuz \
+    --initrd build/tenkei-initramfs.img \
+    --rootfs /tmp/test-rootfs \
+    --dax          # 256M default cache window
+    # or: --dax 512M  for a larger window
+```
+
+This adds a `cache-size` parameter to the QEMU virtiofs device and switches
+virtiofsd to `--cache=always`. The DAX cache window is allocated from the VM's
+shared memory region.
+
+For manual QEMU invocations, add `cache-size=256M` to the device line:
+
+```
+-device vhost-user-fs-pci,chardev=vfs,tag=rootfs,cache-size=256M
+```
+
+DAX is not enabled by default. It adds memory overhead (the cache window is
+reserved) but reduces latency for filesystem I/O.
 
 ## Architecture Support
 

@@ -51,6 +51,8 @@ Options:
   -i, --initrd <path>   Path to initramfs image
   -r, --rootfs <dir>    Path to rootfs directory to serve via virtiofs
   -m, --memory <size>   VM memory in MB (default: 512)
+      --dax [size]      Enable DAX (direct access) with optional cache size
+                        (default: 256M). Sets virtiofsd --cache=always.
       --no-kvm          Disable KVM (slow, but works without /dev/kvm)
       --no-net          Disable networking
       --ssh-port <port> Host port forwarded to guest SSH (default: 2222)
@@ -108,6 +110,8 @@ memory=512
 use_kvm=true
 use_net=true
 ssh_port=2222
+dax_enabled=false
+dax_size="256M"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -115,6 +119,15 @@ while [[ $# -gt 0 ]]; do
         -i|--initrd)  initrd="$2"; shift 2 ;;
         -r|--rootfs)  rootfs="$2"; shift 2 ;;
         -m|--memory)  memory="$2"; shift 2 ;;
+        --dax)
+            dax_enabled=true
+            dax_size="256M"
+            if [[ "${2:-}" =~ ^[0-9]+[MmGg]$ ]]; then
+                dax_size="$2"
+                shift
+            fi
+            shift
+            ;;
         --no-kvm)     use_kvm=false; shift ;;
         --no-net)     use_net=false; shift ;;
         --ssh-port)   ssh_port="$2"; shift 2 ;;
@@ -164,7 +177,7 @@ info "  Rootfs: ${rootfs}"
 "$virtiofsd_bin" \
     --socket-path="$SOCKET_PATH" \
     --shared-dir="$rootfs" \
-    --cache=auto &
+    --cache="$( [[ "$dax_enabled" == "true" ]] && echo always || echo auto )" &
 VIRTIOFSD_PID=$!
 
 # Wait for socket to appear
@@ -192,6 +205,9 @@ info "  Kernel:  ${kernel}"
 info "  Initrd:  ${initrd}"
 info "  Memory:  ${memory}M"
 info "  KVM:     ${use_kvm}"
+if [[ "$dax_enabled" == "true" ]]; then
+    info "  DAX:     enabled (cache-size=${dax_size})"
+fi
 if [[ "$use_net" == "true" ]]; then
     info "  Network: user-mode (SLIRP), guest 10.0.2.x"
     info "  SSH:     ssh -p ${ssh_port} root@127.0.0.1"
@@ -212,7 +228,7 @@ qemu-system-x86_64 \
     ${net_args} \
     -nographic \
     -chardev "socket,id=vfs,path=${SOCKET_PATH}" \
-    -device "vhost-user-fs-pci,chardev=vfs,tag=rootfs" \
+    -device "vhost-user-fs-pci,chardev=vfs,tag=rootfs$( [[ "$dax_enabled" == "true" ]] && echo ",cache-size=${dax_size}" )" \
     -object "memory-backend-memfd,id=mem,size=${memory}M,share=on" \
     -numa "node,memdev=mem" \
     -append "console=ttyS0 rootfstype=virtiofs root=rootfs"

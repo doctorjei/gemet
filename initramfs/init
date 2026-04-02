@@ -11,7 +11,7 @@ mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 
 mkdir -p /newroot
-if ! mount -t virtiofs rootfs /newroot; then
+if ! mount -t virtiofs rootfs /newroot -o dax=inode; then
 	echo "tenkei: virtiofs mount failed (tag=rootfs). Dropping to emergency shell."
 	exec /bin/sh
 fi
