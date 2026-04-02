@@ -93,30 +93,15 @@ apt install build-essential flex bison bc libelf-dev libssl-dev busybox-static
 
 ```bash
 # 1. Create a test rootfs
-sudo debootstrap --variant=minbase bookworm /tmp/test-rootfs
-sudo chroot /tmp/test-rootfs apt install -y udev systemd-sysv
-sudo chroot /tmp/test-rootfs systemctl enable systemd-networkd \
-    serial-getty@ttyS0.service
-sudo chroot /tmp/test-rootfs bash -c 'echo root:test | chpasswd'
+sudo bash scripts/create-test-rootfs.sh /tmp/test-rootfs
 
-# 2. Enable DHCP (QEMU user-mode networking gives the guest 10.0.2.x)
-sudo mkdir -p /tmp/test-rootfs/etc/systemd/network
-cat <<'EOF' | sudo tee /tmp/test-rootfs/etc/systemd/network/80-dhcp.network
-[Match]
-Type=ether
-
-[Network]
-DHCP=yes
-EOF
-echo "nameserver 10.0.2.3" | sudo tee /tmp/test-rootfs/etc/resolv.conf
-
-# 3. Boot it
+# 2. Boot it
 sudo bash scripts/test-boot.sh \
     --kernel build/vmlinuz \
     --initrd build/tenkei-initramfs.img \
     --rootfs /tmp/test-rootfs
 
-# 4. SSH in (from another terminal)
+# 3. SSH in (from another terminal)
 ssh -p 2222 root@127.0.0.1
 ```
 
@@ -133,6 +118,7 @@ tenkei/
 +-- scripts/
 |   +-- build-kernel.sh      # Kernel build wrapper (setup/build/install)
 |   +-- test-boot.sh         # QEMU + virtiofsd boot test helper
+|   +-- create-test-rootfs.sh  # Creates minimal Debian rootfs for boot testing
 |   +-- git-upstream.sh      # Manage upstream kata subtree imports
 +-- docs/
 |   +-- user-guide.md        # Usage documentation

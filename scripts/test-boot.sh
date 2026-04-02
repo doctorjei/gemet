@@ -18,21 +18,7 @@
 #   bash scripts/build-kernel.sh 6.12.8
 #
 #   # 3. Create a test rootfs
-#   sudo debootstrap --variant=minbase bookworm /tmp/test-rootfs
-#   sudo chroot /tmp/test-rootfs apt install -y udev systemd-sysv
-#   sudo chroot /tmp/test-rootfs systemctl enable systemd-networkd \
-#       serial-getty@ttyS0.service
-#   sudo chroot /tmp/test-rootfs bash -c \
-#       'echo root:test | chpasswd'
-#   sudo mkdir -p /tmp/test-rootfs/etc/systemd/network
-#   cat <<'EOF' | sudo tee /tmp/test-rootfs/etc/systemd/network/80-dhcp.network
-#   [Match]
-#   Type=ether
-#
-#   [Network]
-#   DHCP=yes
-#   EOF
-#   echo "nameserver 10.0.2.3" | sudo tee /tmp/test-rootfs/etc/resolv.conf
+#   sudo bash scripts/create-test-rootfs.sh /tmp/test-rootfs
 #
 #   # 4. Boot it (networking + SSH forwarding enabled by default)
 #   bash scripts/test-boot.sh \
