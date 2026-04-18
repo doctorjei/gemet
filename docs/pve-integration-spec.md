@@ -36,6 +36,11 @@ PVE has its own abstraction layer with keys like `memory:`, `cpu:`,
 `net0:`, etc. For anything PVE doesn't have a native config key for,
 the `args:` key passes raw QEMU flags through verbatim.
 
+**Important:** PVE has no native config key for direct kernel boot.
+There is no `kernel:`, `initrd:`, or `cmdline:` key in qemu-server.
+The kernel, initrd, and cmdline must all be passed through `args:` as
+raw `-kernel`, `-initrd`, and `-append` QEMU flags.
+
 Expected config structure:
 
 ```ini
@@ -47,27 +52,26 @@ cpu: host
 kvm: 1
 serial0: socket
 
-# Kernel + initrd (PVE supports these natively for direct kernel boot)
-kernel: /path/to/vmlinuz
-initrd: /path/to/initramfs.img
-cmdline: console=ttyS0 rootfstype=virtiofs root=rootfs
-
 # Networking (PVE manages bridge attachment, not SLIRP)
 net0: virtio,bridge=vmbr0
 
-# --- Raw QEMU flags for virtiofs (no native PVE equivalent) ---
-args: -chardev socket,id=vfs,path=/run/kento/<vmid>/vfs.sock -device vhost-user-fs-pci,chardev=vfs,tag=rootfs -object memory-backend-memfd,id=mem,size=512M,share=on -numa node,memdev=mem
+# --- Raw QEMU flags (no native PVE equivalent) ---
+# Direct kernel boot + virtiofs plumbing all go in args:
+args: -kernel /path/to/vmlinuz -initrd /path/to/initramfs.img -append "console=ttyS0 rootfstype=virtiofs root=rootfs" -chardev socket,id=vfs,path=/run/kento/<vmid>/vfs.sock -device vhost-user-fs-pci,chardev=vfs,tag=rootfs -object memory-backend-memfd,id=mem,size=512M,share=on -numa node,memdev=mem
 ```
 
 Notes on the mapping:
 
-- `memory`, `cpu`, `kvm`, `net0` all have native PVE keys.
-- `kernel`, `initrd`, `cmdline` are native PVE keys for direct kernel boot.
+- `memory`, `cpu`, `kvm`, `net0`, `serial0` all have native PVE keys.
+- Direct kernel boot (`-kernel`, `-initrd`, `-append`) has no native PVE
+  key and must go in `args:`. PVE will silently ignore unknown top-level
+  keys like `kernel:` or `cmdline:` — they parse fine but do nothing.
 - The virtiofs plumbing (chardev, vhost-user-fs-pci, memory-backend-memfd,
-  numa) has no PVE equivalent and must go in `args:`.
+  numa) also has no PVE equivalent and goes in `args:`.
 - The `memory-backend-memfd` size in `args:` must match the `memory:` value.
 - PVE networking uses bridge mode (not SLIRP user-mode). The bridge name
   depends on the host's network config (commonly `vmbr0`).
+- Paths in `args:` with spaces or special characters need to be quoted.
 
 ## PVE-Specific Considerations
 
