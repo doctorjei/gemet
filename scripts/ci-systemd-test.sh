@@ -146,6 +146,14 @@ echo ""
 
 # ─── Check 1: Load OCI archive ────────────────────────────────────
 info "Check 1: podman load -i $OCI_ARCHIVE"
+
+# Snapshot the image list before load so cleanup can distinguish
+# "we added this image" from "image was already in the store, our load
+# was a no-op." Without this check, an unconditional rmi on exit would
+# wipe an image a caller (e.g., the release workflow's build step) had
+# staged before invoking us, breaking downstream steps.
+PRE_LOAD_IMAGES=$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null || true)
+
 LOAD_OUT=""
 if ! LOAD_OUT=$(podman load -i "$OCI_ARCHIVE" 2>&1); then
     echo "$LOAD_OUT" >&2
@@ -164,7 +172,12 @@ else
         echo "$LOAD_OUT" >&2
         fail "could not parse loaded image name from podman load output"
     else
-        IMAGE_LOADED=1
+        if echo "$PRE_LOAD_IMAGES" | grep -Fxq "$IMAGE"; then
+            info "image $IMAGE pre-existed in the store; cleanup will leave it intact"
+            IMAGE_LOADED=0
+        else
+            IMAGE_LOADED=1
+        fi
         pass "loaded image: $IMAGE"
     fi
 fi
