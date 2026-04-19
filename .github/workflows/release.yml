@@ -22,10 +22,10 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      kernel_version:
-        description: 'Kernel version (kata-compatible)'
+      kata_release:
+        description: 'Kata Containers release tag to fetch kernel from (blank = latest)'
         required: false
-        default: '6.18.15'
+        default: ''
 
 permissions:
   contents: write   # create GitHub Releases
@@ -36,8 +36,8 @@ jobs:
     name: Build, test, publish
     runs-on: ubuntu-24.04
     env:
-      # Default kernel version; overridable via workflow_dispatch input.
-      KERNEL_VERSION: ${{ github.event.inputs.kernel_version || '6.18.15' }}
+      # Overridable via workflow_dispatch input; empty means "use latest".
+      KATA_RELEASE_INPUT: ${{ github.event.inputs.kata_release }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
@@ -92,50 +92,91 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          # Explicit list; ubuntu-24.04 ships some of these already but we err
-          # on the side of naming everything we rely on.
-          # - build-essential, flex, bison, bc, libelf-dev, libssl-dev: kernel
-          # - busybox-static, cpio, gzip, xz-utils: initramfs
-          # - debootstrap: yggdrasil base (not strictly needed; rdump path)
-          # - e2fsprogs: provides debugfs + mkfs.ext4 (for yggdrasil rdump + qcow2)
+          # tenkei doesn't patch the kernel, so we fetch Kata's prebuilt
+          # binary rather than compiling one. This drops build-essential +
+          # the kernel-specific dev packages entirely.
+          # - busybox-static, cpio, gzip, xz-utils: initramfs pack + tarball IO
+          # - e2fsprogs: debugfs + mkfs.ext4 (yggdrasil rdump + qcow2)
           # - qemu-utils: qemu-img (qcow2 build)
           # - podman: OCI build + save + GHCR push + Tier 2 systemd-in-OCI test
-          # - jq: small helper for JSON
-          # - curl: yggdrasil downloads the Debian cloud image
+          # - jq, curl: JSON + downloads
           sudo apt-get install -y --no-install-recommends \
-            build-essential flex bison bc libelf-dev libssl-dev \
             busybox-static cpio gzip xz-utils \
-            debootstrap \
             e2fsprogs \
             qemu-utils \
             podman \
             jq \
             curl
-          # Sanity-check the binaries we care about are on PATH.
           for bin in debugfs mkfs.ext4 qemu-img podman busybox cpio jq curl; do
             command -v "$bin" >/dev/null || { echo "ERROR: missing $bin after apt install"; exit 1; }
           done
 
-      - name: Restore kernel build cache
-        uses: actions/cache@v4
-        with:
-          # build-kernel.sh places source at $PWD/kata-linux-<ver>-<config>.
-          # The "<config>" tail is read from upstream/kernel/kata_config_version
-          # and can change across upstream bumps — glob it.
-          path: |
-            kata-linux-${{ env.KERNEL_VERSION }}-*
-            ~/.ccache
-          key: kernel-${{ env.KERNEL_VERSION }}-${{ hashFiles('upstream/kernel/**') }}
-          restore-keys: |
-            kernel-${{ env.KERNEL_VERSION }}-
-
-      - name: Build kernel + initramfs
+      - name: Enable unprivileged user namespaces
         shell: bash
         run: |
           set -euo pipefail
-          echo "Building kernel $KERNEL_VERSION (cold ~25-30 min, warm cache ~seconds)..."
-          bash scripts/build-kernel.sh "$KERNEL_VERSION"
-          ls -l build/vmlinuz build/tenkei-initramfs.img
+          # Ubuntu 24.04 ships with kernel.apparmor_restrict_unprivileged_userns=1
+          # by default, which blocks `unshare --user --map-root-user`. The
+          # yggdrasil build uses this to avoid needing host root, so we
+          # relax it for the life of this runner (ephemeral).
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Fetch Kata prebuilt kernel + build initramfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Tenkei doesn't patch or specialize the kernel (commit b10a21d).
+          # We fetch Kata's prebuilt `vmlinuz.container` out of their
+          # release tarball instead of compiling locally. Drops ~8 min off
+          # cold CI and guarantees byte-exact equivalence with an upstream
+          # Kata kernel for the same release tag.
+          if [[ -n "${KATA_RELEASE_INPUT}" ]]; then
+            API="https://api.github.com/repos/kata-containers/kata-containers/releases/tags/${KATA_RELEASE_INPUT}"
+          else
+            API="https://api.github.com/repos/kata-containers/kata-containers/releases/latest"
+          fi
+          # Authenticated calls get 5000 req/hour vs 60 anonymous —
+          # GITHUB_TOKEN has public-read scope for any repo.
+          RELEASE_JSON=$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "$API")
+          KATA_RELEASE=$(echo "$RELEASE_JSON" | jq -r .tag_name)
+          [[ -n "$KATA_RELEASE" && "$KATA_RELEASE" != "null" ]] \
+            || { echo "ERROR: could not resolve Kata release tag"; exit 1; }
+          # Kata's asset naming has used both amd64 and x86_64 at various
+          # points — discover the actual name from the release JSON.
+          URL=$(echo "$RELEASE_JSON" \
+            | jq -r '.assets[]
+                     | select(.name | test("^kata-static-.*-(amd64|x86_64)\\.tar\\.xz$"))
+                     | .browser_download_url' \
+            | head -1)
+          [[ -n "$URL" && "$URL" != "null" ]] \
+            || { echo "ERROR: no kata-static tarball asset found for $KATA_RELEASE"; exit 1; }
+          echo "Fetching Kata kernel from release: $KATA_RELEASE"
+          echo "URL: $URL"
+
+          mkdir -p build
+          curl -fsSL -o /tmp/kata-static.tar.xz "$URL"
+
+          EXTRACT=/tmp/kata-extract
+          mkdir -p "$EXTRACT"
+          tar -xf /tmp/kata-static.tar.xz -C "$EXTRACT"
+
+          # vmlinuz.container is a symlink to vmlinuz-<ver>-<config>.container —
+          # follow it so we ship the actual bzImage, not a dangling symlink.
+          cp -L "$EXTRACT/opt/kata/share/kata-containers/vmlinuz.container" \
+            build/vmlinuz
+          ls -l build/vmlinuz
+          file build/vmlinuz | grep -q 'Linux kernel' \
+            || { echo "ERROR: fetched vmlinuz is not a Linux kernel image"; exit 1; }
+
+          # Initramfs is tenkei-specific (busybox + virtiofs-aware init).
+          # Build it locally — it's 1 MB and takes a couple seconds.
+          bash initramfs/build.sh build/tenkei-initramfs.img
+          ls -l build/tenkei-initramfs.img
+
+          rm -rf /tmp/kata-static.tar.xz "$EXTRACT"
 
       - name: Build yggdrasil rootfs (tar.xz + qcow2 + OCI import)
         shell: bash

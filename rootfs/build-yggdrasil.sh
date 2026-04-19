@@ -427,8 +427,8 @@ apt-get update
 apt-get install -y --no-install-recommends vim-tiny nano
 
 # Locale-gen MUST run while coreutils is still present (locales' postinst
-# uses `ln -r` which busybox ln doesn't support). Run locale-gen here, then
-# Phase 2b can purge `locales` safely afterward — the compiled archive at
+# uses 'ln -r' which busybox ln doesn't support). Run locale-gen here, then
+# Phase 2b can purge 'locales' safely afterward — the compiled archive at
 # /usr/lib/locale/locale-archive is a generated file, not package-owned.
 if ! dpkg -s locales >/dev/null 2>&1; then
     apt-get install -y --no-install-recommends locales
