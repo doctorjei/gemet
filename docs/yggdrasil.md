@@ -54,6 +54,26 @@ preserved).
 Comments (lines starting with `#`) and blank lines in the source file
 are ignored.
 
+## Testing
+
+Minimum-viable boot tests for a freshly-built `yggdrasil:<ver>`:
+
+```bash
+sudo bash scripts/test-yggdrasil-lxc.sh
+sudo bash scripts/test-yggdrasil-vm.sh
+```
+
+The LXC test boots Yggdrasil as a system container and runs a few probes
+via `lxc-attach` (`systemctl is-system-running`, `/etc/os-release`,
+`/etc/yggdrasil` existence). Pass `--keep` to leave the container in
+place for post-mortem.
+
+The VM test extracts the OCI rootfs to a temp dir, ensures
+`serial-getty@ttyS0.service` is enabled (genericcloud historically skips
+it), and hands off to `scripts/test-boot.sh` for the virtiofsd + QEMU
+heavy lifting. Extra flags after `--` are forwarded (e.g. `-- --dax`,
+`-- --no-kvm`).
+
 ## Plan and phases
 
 Full design and phased implementation plan: `~/playbook/plans/yggdrasil.md`.
