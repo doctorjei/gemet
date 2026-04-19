@@ -110,15 +110,14 @@ PHASE2_PURGE_PACKAGES=(
 )
 
 PHASE4_PURGE_PACKAGES=(
-    libpython3-stdlib python3-apt python3-attr python3-bcrypt python3-blinker
-    python3-certifi python3-cffi-backend python3-chardet
-    python3-charset-normalizer python3-configobj python3-cryptography
-    python3-dbus python3-debconf python3-debian python3-distro
-    python3-distro-info python3-idna python3-jinja2 python3-json-pointer
-    python3-jsonpatch python3-jsonschema python3-jsonschema-specifications
-    python3-jwt python3-markupsafe python3-minimal python3-oauthlib
-    python3-referencing python3-requests python3-rpds-py python3-urllib3
-    python3-yaml
+    python3-apt python3-attr python3-bcrypt python3-blinker python3-certifi
+    python3-cffi-backend python3-chardet python3-charset-normalizer
+    python3-configobj python3-cryptography python3-dbus python3-debconf
+    python3-debian python3-distro python3-distro-info python3-idna
+    python3-jinja2 python3-json-pointer python3-jsonpatch python3-jsonschema
+    python3-jsonschema-specifications python3-jwt python3-markupsafe
+    python3-oauthlib python3-referencing python3-requests python3-rpds-py
+    python3-urllib3 python3-yaml
 )
 
 # ── Usage ───────────────────────────────────────────────────────────
