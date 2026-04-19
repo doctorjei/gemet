@@ -121,15 +121,14 @@ jobs:
           # relax it for the life of this runner (ephemeral).
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      - name: Fetch Kata prebuilt kernel + build initramfs
+      - name: Resolve Kata release tag and asset URL
+        id: kata
         shell: bash
         run: |
           set -euo pipefail
           # Tenkei doesn't patch or specialize the kernel (commit b10a21d).
           # We fetch Kata's prebuilt `vmlinuz.container` out of their
-          # release tarball instead of compiling locally. Drops ~8 min off
-          # cold CI and guarantees byte-exact equivalence with an upstream
-          # Kata kernel for the same release tag.
+          # release tarball instead of compiling locally.
           if [[ -n "${KATA_RELEASE_INPUT}" ]]; then
             API="https://api.github.com/repos/kata-containers/kata-containers/releases/tags/${KATA_RELEASE_INPUT}"
           else
@@ -154,13 +153,34 @@ jobs:
             | head -1)
           [[ -n "$URL" && "$URL" != "null" ]] \
             || { echo "ERROR: no kata-static tarball asset found for $KATA_RELEASE"; exit 1; }
-          echo "Fetching Kata kernel from release: $KATA_RELEASE"
-          echo "URL: $URL"
+          echo "Resolved Kata release: $KATA_RELEASE"
+          echo "Asset URL: $URL"
+          {
+            echo "tag=$KATA_RELEASE"
+            echo "url=$URL"
+          } >> "$GITHUB_OUTPUT"
 
-          # The full kata-static tarball is ~1.6 GB (includes qemu,
-          # cloud-hypervisor, firecracker, agents, etc.); we only want
-          # the ~8 MB kernel. Download, then extract just the vmlinuz
-          # files — saves disk and extract time.
+      - name: Restore cached Kata kernel
+        id: kernel-cache
+        uses: actions/cache@v4
+        with:
+          # Cache just build/vmlinuz (~8 MB) — no need to cache the
+          # 1.6 GB tarball. Keyed on the resolved Kata release tag, so
+          # once a given Kata release has been downloaded once, every
+          # subsequent run with the same tag is a cache hit (seconds
+          # vs minutes).
+          path: build/vmlinuz
+          key: kata-kernel-${{ steps.kata.outputs.tag }}
+
+      - name: Download Kata kernel (cache miss)
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="${{ steps.kata.outputs.url }}"
+          # The full kata-static tarball is ~1.6 GB (qemu, cloud-
+          # hypervisor, firecracker, agents, runtime); we only want the
+          # ~8 MB kernel. Download, then extract just the vmlinuz files.
           mkdir -p build
           ARCHIVE=/tmp/kata-static.tar
           curl -fsSL -o "$ARCHIVE" "$URL"
@@ -172,23 +192,25 @@ jobs:
           EXTRACT=/tmp/kata-extract
           mkdir -p "$EXTRACT"
           # Extract the vmlinuz symlink AND its target file (versioned
-          # .container binary). `vmlinuz*` matches both, tar preserves
+          # .container binary). `vmlinuz*` matches both; tar preserves
           # the symlink as a symlink.
           tar "${TAR_COMP[@]}" -xf "$ARCHIVE" -C "$EXTRACT" \
             --wildcards './opt/kata/share/kata-containers/vmlinuz*'
-
           cp -L "$EXTRACT/opt/kata/share/kata-containers/vmlinuz.container" \
             build/vmlinuz
+          rm -rf "$ARCHIVE" "$EXTRACT"
+
+      - name: Verify kernel and build initramfs
+        shell: bash
+        run: |
+          set -euo pipefail
           ls -l build/vmlinuz
           file build/vmlinuz | grep -q 'Linux kernel' \
-            || { echo "ERROR: fetched vmlinuz is not a Linux kernel image"; exit 1; }
-
+            || { echo "ERROR: build/vmlinuz is not a Linux kernel image"; exit 1; }
           # Initramfs is tenkei-specific (busybox + virtiofs-aware init).
           # Build it locally — it's 1 MB and takes a couple seconds.
           bash initramfs/build.sh build/tenkei-initramfs.img
           ls -l build/tenkei-initramfs.img
-
-          rm -rf "$ARCHIVE" "$EXTRACT"
 
       - name: Build yggdrasil rootfs (tar.xz + qcow2 + OCI import)
         shell: bash
