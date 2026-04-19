@@ -48,7 +48,7 @@ images.
 | Raw      | `build/tenkei-initramfs.img`          | initramfs (~1.1 MB)                     |
 | OCI      | `tenkei-kernel:<ver>`                 | kernel-as-OCI — see [docs/kernel-as-oci.md](docs/kernel-as-oci.md) |
 | OCI      | `yggdrasil:<ver>`                     | minimal Debian 13 + systemd userland — see [docs/yggdrasil.md](docs/yggdrasil.md) |
-| Tarball  | `build/yggdrasil-<ver>.tgz`           | Yggdrasil rootfs for `lxc-create`       |
+| Tarball  | `build/yggdrasil-<ver>.tar.xz`        | Yggdrasil rootfs for `lxc-create`       |
 | qcow2    | `build/yggdrasil-<ver>.qcow2`         | bootable disk image for `qemu -drive`   |
 
 ## Relationship to Kata Containers
@@ -141,7 +141,7 @@ tenkei/
 +-- kernel/
 |   +-- Containerfile        # kernel-as-OCI image source
 +-- rootfs/
-|   +-- build-yggdrasil.sh        # Yggdrasil OCI + .tgz builder
+|   +-- build-yggdrasil.sh        # Yggdrasil OCI + .tar.xz builder
 |   +-- build-yggdrasil-disk.sh   # Yggdrasil qcow2 builder
 |   +-- seed-target.txt           # package keep-list
 |   +-- networkd/                 # staged systemd-networkd config

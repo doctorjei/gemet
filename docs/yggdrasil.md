@@ -3,7 +3,7 @@
 Yggdrasil is tenkei's minimal Debian 13 + systemd foundation image. It serves
 as the base layer for downstream rootfs builds (droste tiers, kento test
 fixtures, user-defined images) and is published in three artifact forms: OCI
-image, `.tgz` tarball, and qcow2 disk image.
+image, `.tar.xz` tarball, and qcow2 disk image.
 
 ## What it is
 
@@ -70,17 +70,17 @@ from genericcloud hang boot in VM/container contexts).
 ## Build
 
 ```bash
-sudo bash rootfs/build-yggdrasil.sh           # OCI + .tgz (default)
-sudo bash rootfs/build-yggdrasil-disk.sh      # qcow2 (reads OCI or .tgz)
+sudo bash rootfs/build-yggdrasil.sh           # OCI + .tar.xz (default)
+sudo bash rootfs/build-yggdrasil-disk.sh      # qcow2 (reads OCI or .tar.xz)
 ```
 
 `build-yggdrasil.sh` produces OCI image `yggdrasil:<version>` (version from
-tenkei's `VERSION` file) and `build/yggdrasil-<version>.tgz`. Flags to
-selectively skip outputs: `--no-import` (no OCI image), `--no-tgz`
+tenkei's `VERSION` file) and `build/yggdrasil-<version>.tar.xz`. Flags to
+selectively skip outputs: `--no-import` (no OCI image), `--no-txz`
 (no tarball). Both flags are independent.
 
 `build-yggdrasil-disk.sh` produces `build/yggdrasil-<version>.qcow2` from
-either the OCI image (default) or an existing `.tgz` (via `--from-tgz`).
+either the OCI image (default) or an existing `.tar.xz` (via `--from-txz`).
 
 ## Artifact forms
 
@@ -90,7 +90,7 @@ same rootfs work directory:
 | Form        | Output                                    | Primary consumer                         |
 |-------------|-------------------------------------------|------------------------------------------|
 | OCI image   | `yggdrasil:<ver>` (in podman/docker)      | droste tiers, kento test fixtures        |
-| `.tgz`      | `build/yggdrasil-<ver>.tgz`               | `lxc-create -t local --rootfs=<tgz>`     |
+| `.tar.xz`   | `build/yggdrasil-<ver>.tar.xz`            | `lxc-create -t local --rootfs=<tarball>` |
 | qcow2       | `build/yggdrasil-<ver>.qcow2`             | External boot via `qemu -kernel -initrd` |
 
 ## Boot contracts

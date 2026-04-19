@@ -218,7 +218,7 @@ commands, downstream pattern, and version compatibility notes.
 Tenkei publishes `yggdrasil:<ver>` — a minimal Debian 13 + systemd OCI
 image intended as the foundation for downstream rootfs builds (droste
 tiers, kento test fixtures, user-defined images). It ships in three
-artifact forms: OCI image, `.tgz` tarball, and qcow2 disk image.
+artifact forms: OCI image, `.tar.xz` tarball, and qcow2 disk image.
 
 See [yggdrasil](yggdrasil.md) for the strip list, artifact forms, boot
 contracts, SSH-key sync, and the canonical downstream-consumption

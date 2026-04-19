@@ -3,7 +3,7 @@
 # build-yggdrasil-disk — Build a bootable qcow2 disk image for Yggdrasil
 #
 # Produces a qcow2 containing a single ext4 filesystem populated from either
-# an existing OCI image (yggdrasil:<ver>) or a .tgz tarball produced by
+# an existing OCI image (yggdrasil:<ver>) or a .tar.xz tarball produced by
 # rootfs/build-yggdrasil.sh. No partition table, no bootloader, no /boot —
 # the image is intended to be booted externally via tenkei's kernel +
 # initramfs using the block-device branch in initramfs/init:
@@ -21,7 +21,7 @@
 #
 # Usage:
 #   build-yggdrasil-disk.sh [--from-oci <tag>]   (default, version from VERSION)
-#   build-yggdrasil-disk.sh [--from-tgz <path>]
+#   build-yggdrasil-disk.sh [--from-txz <path>]
 #   build-yggdrasil-disk.sh [--size <GB>]        (default: 2; Yggdrasil ~400 MB)
 #   build-yggdrasil-disk.sh [--output <path>]    (default: build/yggdrasil-<ver>.qcow2)
 #
@@ -43,7 +43,7 @@ BUILD_DIR="$REPO_ROOT/build"
 VERSION_FILE="$REPO_ROOT/VERSION"
 
 FROM_OCI=""
-FROM_TGZ=""
+FROM_TXZ=""
 SIZE_GB=2
 OUTPUT=""
 
@@ -60,19 +60,19 @@ usage() {
 Usage: $(basename "$0") [OPTIONS]
 
 Build a bootable qcow2 disk image (partition-less, single ext4 fs, no
-bootloader) from either the Yggdrasil OCI image or a .tgz tarball.
+bootloader) from either the Yggdrasil OCI image or a .tar.xz tarball.
 
 Options:
       --from-oci <tag>   Source the rootfs from an OCI image tag
                          (default: yggdrasil:$VERSION)
-      --from-tgz <path>  Source the rootfs from a .tgz tarball
+      --from-txz <path>  Source the rootfs from a .tar.xz tarball
                          (produced by rootfs/build-yggdrasil.sh)
       --size <GB>        Disk image size in GiB (default: 2)
       --output <path>    Output qcow2 path
                          (default: $BUILD_DIR/yggdrasil-$VERSION.qcow2)
   -h, --help             Show help
 
---from-oci and --from-tgz are mutually exclusive. If neither is given,
+--from-oci and --from-txz are mutually exclusive. If neither is given,
 --from-oci yggdrasil:$VERSION is used.
 
 Boot contract (partition-less — the whole disk is one ext4 fs):
@@ -96,7 +96,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --from-oci)  FROM_OCI="$2"; shift 2 ;;
-        --from-tgz)  FROM_TGZ="$2"; shift 2 ;;
+        --from-txz)  FROM_TXZ="$2"; shift 2 ;;
         --size)      SIZE_GB="$2"; shift 2 ;;
         --output)    OUTPUT="$2"; shift 2 ;;
         -h|--help)   usage; exit 0 ;;
@@ -106,10 +106,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ─── Resolve defaults + validate ──────────────────────────────────
-if [[ -n "$FROM_OCI" && -n "$FROM_TGZ" ]]; then
-    error "--from-oci and --from-tgz are mutually exclusive"
+if [[ -n "$FROM_OCI" && -n "$FROM_TXZ" ]]; then
+    error "--from-oci and --from-txz are mutually exclusive"
 fi
-if [[ -z "$FROM_OCI" && -z "$FROM_TGZ" ]]; then
+if [[ -z "$FROM_OCI" && -z "$FROM_TXZ" ]]; then
     FROM_OCI="yggdrasil:$VERSION"
 fi
 
@@ -145,8 +145,8 @@ if [[ -n "$FROM_OCI" ]]; then
         error "OCI image '$FROM_OCI' not found locally. Build it first: sudo bash rootfs/build-yggdrasil.sh"
 fi
 
-if [[ -n "$FROM_TGZ" ]]; then
-    [[ -f "$FROM_TGZ" ]] || error "tarball not found: $FROM_TGZ"
+if [[ -n "$FROM_TXZ" ]]; then
+    [[ -f "$FROM_TXZ" ]] || error "tarball not found: $FROM_TXZ"
 fi
 
 mkdir -p "$BUILD_DIR"
@@ -191,8 +191,8 @@ if [[ -n "$FROM_OCI" ]]; then
     $CONTAINER_CMD rm "$TEMP_CONTAINER" >/dev/null
     TEMP_CONTAINER=""
 else
-    info "Extracting rootfs from tarball '$FROM_TGZ'..."
-    tar -xzf "$FROM_TGZ" -C "$TMP_ROOTFS"
+    info "Extracting rootfs from tarball '$FROM_TXZ'..."
+    tar -xJf "$FROM_TXZ" -C "$TMP_ROOTFS"
 fi
 
 ROOTFS_BYTES=$(du -sb "$TMP_ROOTFS" | awk '{print $1}')
@@ -250,7 +250,7 @@ TMP_RAW=""
 # ─── Summary ──────────────────────────────────────────────────────
 echo ""
 info "yggdrasil disk image built successfully."
-echo "  Source:   ${FROM_OCI:-$FROM_TGZ}"
+echo "  Source:   ${FROM_OCI:-$FROM_TXZ}"
 echo "  Output:   $OUTPUT"
 echo "  Size:     $(du -h "$OUTPUT" | awk '{print $1}') (qcow2, compressed; ${SIZE_GB}G virtual)"
 echo ""
