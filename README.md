@@ -85,6 +85,14 @@ two projects solve different problems:
 - `kata-runtime` -- replaced by kento's VM management
 - containerd shim -- not needed; kento talks to QEMU directly
 
+**Kernel interchangeability:** tenkei does not patch or specialize the
+kernel. `scripts/build-kernel.sh` is a thin wrapper around upstream Kata's
+builder using Kata's stock config fragments unmodified, so a tenkei
+`vmlinuz` is functionally equivalent to any Kata Containers kernel built
+for the same version. If you have a Kata kernel binary on hand (release
+artifact, OCI image, or prior build), you can drop it in at
+`build/vmlinuz` and skip the local compile.
+
 The upstream Kata code lives in `upstream/` as git subtrees. Changes to these
 files are not committed — they are overwritten on the next upstream sync.
 Tenkei's own code wraps or overrides upstream behavior as needed. Local
@@ -96,7 +104,7 @@ customization (e.g., kernel config fragments) is fine for personal builds.
 
 ```bash
 # Build kernel + initramfs (output goes to build/)
-bash scripts/build-kernel.sh 6.12.8
+bash scripts/build-kernel.sh 6.18.15
 ```
 
 This downloads the kernel source, configures it with Kata's config fragments,

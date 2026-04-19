@@ -77,6 +77,26 @@ Downstream consumers that need a specific kernel version should pin on
 tenkei's `VERSION` — this pins the kernel version that tenkei's build
 scripts are wired up against for that release.
 
+## Interchangeability with Kata kernels
+
+Tenkei does not patch or specialize the kernel. `scripts/build-kernel.sh`
+is a thin wrapper around upstream Kata's builder that uses Kata's stock
+config fragments unmodified. The resulting `vmlinuz` is functionally
+equivalent to any Kata Containers kernel built for the same version with
+the same fragment set.
+
+Practical consequence: if you have a Kata kernel binary on hand (from a
+kata-containers release, an OCI image they publish, or a previous tenkei
+build), you can drop it in at `build/vmlinuz` and skip the local kernel
+compile entirely. The required configs — `CONFIG_VIRTIO_FS`,
+`CONFIG_FUSE_DAX`, `CONFIG_VIRTIO_BLK`, `CONFIG_EXT4_FS`, plus the rest
+of Kata's `common/` fragment — are already on by default in any Kata
+build, so no per-fragment auditing is needed.
+
+This also means tenkei's kernel is not a long-lived artifact in any
+meaningful sense — bumping to a newer Kata kernel version is the same
+operation as building one for the first time.
+
 ## Why OCI
 
 The raw files (`build/vmlinuz` and `build/tenkei-initramfs.img`) still

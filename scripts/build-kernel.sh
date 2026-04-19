@@ -8,10 +8,10 @@
 #
 # Usage:
 #   build-kernel.sh <version> [setup|build|install]
-#   build-kernel.sh 6.12.8 setup    — download and configure kernel source
-#   build-kernel.sh 6.12.8 build    — build the kernel
-#   build-kernel.sh 6.12.8 install  — copy vmlinuz + initramfs to build/
-#   build-kernel.sh 6.12.8          — setup + build + install (default)
+#   build-kernel.sh 6.18.15 setup    — download and configure kernel source
+#   build-kernel.sh 6.18.15 build    — build the kernel
+#   build-kernel.sh 6.18.15 install  — copy vmlinuz + initramfs to build/
+#   build-kernel.sh 6.18.15          — setup + build + install (default)
 #
 # The install step also builds the initramfs if it doesn't exist yet.
 # Output goes to build/ in the repo root:
@@ -42,7 +42,7 @@ usage() {
 Usage: build-kernel.sh <version> [setup|build|install]
 
 Arguments:
-  version   Kernel version (e.g., 6.12.8, 6.1.75)
+  version   Kernel version (e.g., 6.18.15, 6.1.75)
   command   setup  — download and configure kernel source
             build  — compile the kernel
             install — copy vmlinuz + initramfs to build/

@@ -15,7 +15,7 @@
 #   bash initramfs/build.sh
 #
 #   # 2. Build a kernel (or use a prebuilt one)
-#   bash scripts/build-kernel.sh 6.12.8
+#   bash scripts/build-kernel.sh 6.18.15
 #
 #   # 3. Create a test rootfs
 #   sudo bash scripts/create-test-rootfs.sh /tmp/test-rootfs

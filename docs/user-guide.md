@@ -27,12 +27,12 @@ To build:
 
 ```bash
 # Setup + build + install in one step (output goes to build/)
-bash scripts/build-kernel.sh 6.12.8
+bash scripts/build-kernel.sh 6.18.15
 
 # Or separately
-bash scripts/build-kernel.sh 6.12.8 setup    # download source + apply patches
-bash scripts/build-kernel.sh 6.12.8 build    # compile
-bash scripts/build-kernel.sh 6.12.8 install  # copy vmlinuz + initramfs to build/
+bash scripts/build-kernel.sh 6.18.15 setup    # download source + apply patches
+bash scripts/build-kernel.sh 6.18.15 build    # compile
+bash scripts/build-kernel.sh 6.18.15 install  # copy vmlinuz + initramfs to build/
 ```
 
 Output:
@@ -97,7 +97,7 @@ layers that kento uses for LXC containers.
 
 ```bash
 # 1. Build kernel + initramfs
-bash scripts/build-kernel.sh 6.12.8
+bash scripts/build-kernel.sh 6.18.15
 
 # 2. Create a test rootfs
 sudo bash scripts/create-test-rootfs.sh /tmp/test-rootfs
