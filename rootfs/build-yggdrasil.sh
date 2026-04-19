@@ -13,6 +13,15 @@
 # Usage:
 #   build-yggdrasil.sh
 #   build-yggdrasil.sh --no-import    # Build rootfs only, skip container import
+#   build-yggdrasil.sh --no-tgz       # Skip the .tgz tarball artifact
+#
+# Produces (by default):
+#   - OCI image  yggdrasil:<version>            (via --import, on by default)
+#   - Tarball    build/yggdrasil-<version>.tgz  (raw rootfs, for lxc-create etc.)
+#
+# --no-import and --no-tgz are independent; pass either or both to drop the
+# corresponding artifact. At least the rootfs is still staged in a temp dir
+# during the run (cleaned on exit).
 #
 # Requires: root (for qemu-nbd, mount, chroot), podman or docker (for import).
 #
@@ -30,6 +39,7 @@ SSHKEY_UNIT="$REPO_ROOT/rootfs/sshkey/yggdrasil-sshkey-sync.service"
 SSHKEY_SCRIPT="$REPO_ROOT/rootfs/sshkey/sync-sshkeys.sh"
 VERSION_FILE="$REPO_ROOT/VERSION"
 DO_IMPORT=true
+DO_TGZ=true
 
 QCOW2_URL="https://cloud.debian.org/images/cloud/trixie/latest"
 QCOW2_FILE="debian-13-genericcloud-amd64.qcow2"
@@ -127,7 +137,8 @@ Yggdrasil-specific drop list, stages networkd config + the ssh-key sync service,
 and imports the result as OCI image '$IMAGE_TAG'.
 
 Options:
-      --no-import      Build rootfs only, skip container import
+      --no-import      Skip container import (OCI image not produced)
+      --no-tgz         Skip .tgz tarball output
   -h, --help           Show help
 
 Requires: root (for qemu-nbd, mount, chroot), podman or docker (for import).
@@ -140,6 +151,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-import)     DO_IMPORT=false; shift ;;
+        --no-tgz)        DO_TGZ=false; shift ;;
         -h|--help)       usage; exit 0 ;;
         -*)              echo "Error: unknown option: $1" >&2; usage >&2; exit 1 ;;
         *)               echo "Error: unexpected argument: $1" >&2; usage >&2; exit 1 ;;
@@ -439,6 +451,17 @@ rm -rf "$WORK_DIR/lib/modules/"*
 # don't exist in containers, and cause boot failures in VM-bootable images)
 printf '# Empty — no block devices in OCI base\n' > "$WORK_DIR/etc/fstab"
 
+# ── Produce tarball artifact ────────────────────────────────────────
+# Written before the OCI import so both artifacts come from the same
+# staged work dir. Independent of --no-import.
+TGZ_PATH="$BUILD_DIR/yggdrasil-${VERSION}.tgz"
+if $DO_TGZ; then
+    info "Writing tarball $TGZ_PATH..."
+    mkdir -p "$BUILD_DIR"
+    tar -czf "$TGZ_PATH" -C "$WORK_DIR" .
+    info "Tarball size: $(du -h "$TGZ_PATH" | awk '{print $1}')"
+fi
+
 # ── Import into container engine ────────────────────────────────────
 if $DO_IMPORT; then
     info "Importing into $CONTAINER_CMD as $IMAGE_TAG..."
@@ -456,4 +479,7 @@ echo "  Source:   $QCOW2_FILE (genericcloud)"
 echo "  Removed:  ${#PURGE_PACKAGES[@]} kernel/boot + ${#YGGDRASIL_STRIP_PACKAGES[@]} Yggdrasil-specific packages"
 if $DO_IMPORT; then
     echo "  Image:    $IMAGE_TAG ($CONTAINER_CMD)"
+fi
+if $DO_TGZ; then
+    echo "  Tarball:  $TGZ_PATH"
 fi

@@ -23,12 +23,52 @@ kernel + initramfs (tenkei's own) rather than a self-contained boot stack.
 ## Build
 
 ```bash
-sudo bash rootfs/build-yggdrasil.sh
+sudo bash rootfs/build-yggdrasil.sh           # OCI + .tgz (default)
+sudo bash rootfs/build-yggdrasil-disk.sh      # qcow2 (reads OCI or .tgz)
 ```
 
-Produces OCI image `yggdrasil:<version>` (version from tenkei's `VERSION`
-file). The `--no-import` flag builds the rootfs without importing into
-podman/docker.
+`build-yggdrasil.sh` produces OCI image `yggdrasil:<version>` (version from
+tenkei's `VERSION` file) and `build/yggdrasil-<version>.tgz`. Flags to
+selectively skip outputs: `--no-import` (no OCI image), `--no-tgz`
+(no tarball). Both flags are independent.
+
+`build-yggdrasil-disk.sh` produces `build/yggdrasil-<version>.qcow2` from
+either the OCI image (default) or an existing `.tgz` (via `--from-tgz`).
+
+## Artifact forms
+
+Yggdrasil is published in three artifact forms, all produced from the
+same rootfs work directory:
+
+| Form        | Output                                    | Primary consumer                         |
+|-------------|-------------------------------------------|------------------------------------------|
+| OCI image   | `yggdrasil:<ver>` (in podman/docker)      | droste tiers, kento test fixtures        |
+| `.tgz`      | `build/yggdrasil-<ver>.tgz`               | `lxc-create -t local --rootfs=<tgz>`     |
+| qcow2       | `build/yggdrasil-<ver>.qcow2`             | External boot via `qemu -kernel -initrd` |
+
+### qcow2 boot contract
+
+The qcow2 is a **partition-less** single ext4 filesystem — no partition
+table, no bootloader, no `/boot`. That means the guest sees the rootfs at
+`/dev/vda`, not `/dev/vda1`. The kernel cmdline must include:
+
+```
+root=/dev/vda rootfstype=ext4
+```
+
+tenkei's initramfs dispatches on those cmdline args and mounts the block
+device directly (see `initramfs/init`). The corresponding boot invocation
+is:
+
+```bash
+qemu-system-x86_64 \
+    -kernel build/vmlinuz \
+    -initrd build/tenkei-initramfs.img \
+    -drive file=build/yggdrasil-<ver>.qcow2,format=qcow2,if=virtio \
+    -append "console=ttyS0 root=/dev/vda rootfstype=ext4"
+```
+
+`scripts/test-yggdrasil-disk.sh` wraps this with sensible defaults.
 
 ## SSH key sync contract
 
@@ -61,6 +101,7 @@ Minimum-viable boot tests for a freshly-built `yggdrasil:<ver>`:
 ```bash
 sudo bash scripts/test-yggdrasil-lxc.sh
 sudo bash scripts/test-yggdrasil-vm.sh
+bash     scripts/test-yggdrasil-disk.sh
 ```
 
 The LXC test boots Yggdrasil as a system container and runs a few probes
@@ -73,6 +114,10 @@ The VM test extracts the OCI rootfs to a temp dir, ensures
 it), and hands off to `scripts/test-boot.sh` for the virtiofsd + QEMU
 heavy lifting. Extra flags after `--` are forwarded (e.g. `-- --dax`,
 `-- --no-kvm`).
+
+The disk test boots the qcow2 artifact directly via QEMU with tenkei's
+kernel + initramfs — no virtiofsd. Default SSH forward is `localhost:2223`
+(different from the VM test's 2222 so both can run concurrently).
 
 ## Plan and phases
 
