@@ -1,0 +1,337 @@
+name: release
+
+# Tag-triggered release workflow for tenkei (Minimal tier).
+#
+# Trigger:
+#   - push of a tag matching "v*"          -> real release (artifacts + GHCR push + GitHub Release)
+#   - workflow_dispatch (manual)           -> build + test only (no GHCR push, no Release)
+#
+# Cold runs take ~25-30 min (kernel compile dominates); subsequent runs hit
+# the actions/cache entry keyed on kernel version + upstream/kernel subtree
+# hash and should complete in a few minutes.
+#
+# Releases that touch kernel/initramfs code paths are created as DRAFTS
+# with a pre-publish checklist; a human must run yggdrasil-smoke-test.sh
+# on a KVM-capable host before flipping the draft to published.
+#
+# See playbook plan: ~/playbook/plans/github-ci.md (Phase 3).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: 'Kernel version (kata-compatible)'
+        required: false
+        default: '6.18.15'
+
+permissions:
+  contents: write   # create GitHub Releases
+  packages: write   # push OCI images to GHCR
+
+jobs:
+  release:
+    name: Build, test, publish
+    runs-on: ubuntu-24.04
+    env:
+      # Default kernel version; overridable via workflow_dispatch input.
+      KERNEL_VERSION: ${{ github.event.inputs.kernel_version || '6.18.15' }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout (full history for tag diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Derive version and tag
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#v}"
+            IS_TAG_PUSH=true
+          else
+            # workflow_dispatch: derive from VERSION file, synthesize tag
+            # for log context only — we do NOT push a tag or create a release.
+            VERSION="$(tr -d '[:space:]' < VERSION)"
+            TAG="v${VERSION}"
+            IS_TAG_PUSH=false
+          fi
+          [[ -n "$VERSION" ]] || { echo "ERROR: empty VERSION"; exit 1; }
+          echo "VERSION=$VERSION"
+          echo "TAG=$TAG"
+          echo "IS_TAG_PUSH=$IS_TAG_PUSH"
+          echo "KERNEL_VERSION=$KERNEL_VERSION"
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "is_tag_push=$IS_TAG_PUSH"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Gate — VERSION matches tag
+        if: steps.ver.outputs.is_tag_push == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE_VER="$(tr -d '[:space:]' < VERSION)"
+          EXPECT="${{ steps.ver.outputs.version }}"
+          if [[ "$FILE_VER" != "$EXPECT" ]]; then
+            echo "ERROR: VERSION file ('$FILE_VER') does not match tag-derived version ('$EXPECT')" >&2
+            echo "Refusing to build a release whose VERSION file disagrees with its tag." >&2
+            exit 1
+          fi
+          echo "VERSION file matches tag: $FILE_VER"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          # Explicit list; ubuntu-24.04 ships some of these already but we err
+          # on the side of naming everything we rely on.
+          # - build-essential, flex, bison, bc, libelf-dev, libssl-dev: kernel
+          # - busybox-static, cpio, gzip, xz-utils: initramfs
+          # - debootstrap: yggdrasil base (not strictly needed; rdump path)
+          # - e2fsprogs: provides debugfs + mkfs.ext4 (for yggdrasil rdump + qcow2)
+          # - qemu-utils: qemu-img (qcow2 build)
+          # - podman: OCI build + save + GHCR push + Tier 2 systemd-in-OCI test
+          # - jq: small helper for JSON
+          # - curl: yggdrasil downloads the Debian cloud image
+          sudo apt-get install -y --no-install-recommends \
+            build-essential flex bison bc libelf-dev libssl-dev \
+            busybox-static cpio gzip xz-utils \
+            debootstrap \
+            e2fsprogs \
+            qemu-utils \
+            podman \
+            jq \
+            curl
+          # Sanity-check the binaries we care about are on PATH.
+          for bin in debugfs mkfs.ext4 qemu-img podman busybox cpio jq curl; do
+            command -v "$bin" >/dev/null || { echo "ERROR: missing $bin after apt install"; exit 1; }
+          done
+
+      - name: Restore kernel build cache
+        uses: actions/cache@v4
+        with:
+          # build-kernel.sh places source at $PWD/kata-linux-<ver>-<config>.
+          # The "<config>" tail is read from upstream/kernel/kata_config_version
+          # and can change across upstream bumps — glob it.
+          path: |
+            kata-linux-${{ env.KERNEL_VERSION }}-*
+            ~/.ccache
+          key: kernel-${{ env.KERNEL_VERSION }}-${{ hashFiles('upstream/kernel/**') }}
+          restore-keys: |
+            kernel-${{ env.KERNEL_VERSION }}-
+
+      - name: Build kernel + initramfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Building kernel $KERNEL_VERSION (cold ~25-30 min, warm cache ~seconds)..."
+          bash scripts/build-kernel.sh "$KERNEL_VERSION"
+          ls -l build/vmlinuz build/tenkei-initramfs.img
+
+      - name: Build yggdrasil rootfs (tar.xz + qcow2 + OCI import)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash rootfs/build-yggdrasil.sh
+          VERSION="${{ steps.ver.outputs.version }}"
+          ls -l "build/yggdrasil-${VERSION}.tar.xz" "build/yggdrasil-${VERSION}.qcow2"
+          podman image exists "localhost/yggdrasil:${VERSION}" \
+            || { echo "ERROR: yggdrasil OCI image was not imported"; exit 1; }
+
+      - name: Build kernel-as-OCI image
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          bash scripts/build-kernel-oci.sh "$VERSION"
+          podman image exists "localhost/tenkei-kernel:${VERSION}" \
+            || { echo "ERROR: tenkei-kernel OCI image was not built"; exit 1; }
+
+      - name: Export OCI archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          podman save --format=oci-archive \
+            -o "build/yggdrasil-${VERSION}-oci.tar" \
+            "localhost/yggdrasil:${VERSION}"
+          podman save --format=oci-archive \
+            -o "build/tenkei-kernel-${VERSION}-oci.tar" \
+            "localhost/tenkei-kernel:${VERSION}"
+          ls -l "build/yggdrasil-${VERSION}-oci.tar" "build/tenkei-kernel-${VERSION}-oci.tar"
+
+      - name: Tier 1 — structural tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          bash scripts/ci-structural-tests.sh --build-dir=build/ --version="$VERSION"
+
+      - name: Tier 2 — systemd-in-OCI tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          bash scripts/ci-systemd-test.sh \
+            --oci-archive="build/yggdrasil-${VERSION}-oci.tar" \
+            --version="$VERSION"
+
+      - name: Compute boot-path change (requires VM smoke test?)
+        id: bootcheck
+        if: steps.ver.outputs.is_tag_push == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.ver.outputs.tag }}"
+          # Find the most recent tag strictly before HEAD. If none, treat as
+          # first release and conservatively require a VM smoke test.
+          PREV_TAG="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo '')"
+          BOOT_TEST_REQUIRED=false
+          CHANGE_REASON=""
+          if [[ -z "$PREV_TAG" ]]; then
+            BOOT_TEST_REQUIRED=true
+            CHANGE_REASON="first release (no previous tag)"
+          else
+            CHANGED="$(git diff --name-only "${PREV_TAG}..HEAD" || true)"
+            echo "Changed files since $PREV_TAG:"
+            echo "$CHANGED" | sed 's/^/  /'
+            if echo "$CHANGED" | grep -qE '^(initramfs/|upstream/kernel/|scripts/build-kernel\.sh|scripts/build-kernel-oci\.sh|kernel/|\.github/workflows/release\.yml)'; then
+              BOOT_TEST_REQUIRED=true
+              CHANGE_REASON="kernel/initramfs paths changed since ${PREV_TAG}"
+            fi
+          fi
+          echo "PREV_TAG=$PREV_TAG"
+          echo "BOOT_TEST_REQUIRED=$BOOT_TEST_REQUIRED"
+          echo "CHANGE_REASON=$CHANGE_REASON"
+          {
+            echo "prev_tag=$PREV_TAG"
+            echo "boot_test_required=$BOOT_TEST_REQUIRED"
+            echo "change_reason=$CHANGE_REASON"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: steps.ver.outputs.is_tag_push == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Tag and push OCI images to GHCR
+        if: steps.ver.outputs.is_tag_push == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          podman tag "localhost/yggdrasil:${VERSION}" \
+            "ghcr.io/doctorjei/tenkei/yggdrasil:${VERSION}"
+          podman tag "localhost/yggdrasil:${VERSION}" \
+            "ghcr.io/doctorjei/tenkei/yggdrasil:latest"
+          podman push "ghcr.io/doctorjei/tenkei/yggdrasil:${VERSION}"
+          podman push "ghcr.io/doctorjei/tenkei/yggdrasil:latest"
+
+          podman tag "localhost/tenkei-kernel:${VERSION}" \
+            "ghcr.io/doctorjei/tenkei/tenkei-kernel:${VERSION}"
+          podman tag "localhost/tenkei-kernel:${VERSION}" \
+            "ghcr.io/doctorjei/tenkei/tenkei-kernel:latest"
+          podman push "ghcr.io/doctorjei/tenkei/tenkei-kernel:${VERSION}"
+          podman push "ghcr.io/doctorjei/tenkei/tenkei-kernel:latest"
+
+      - name: Create GitHub Release
+        if: steps.ver.outputs.is_tag_push == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          TAG="${{ steps.ver.outputs.tag }}"
+          BOOT_TEST_REQUIRED="${{ steps.bootcheck.outputs.boot_test_required }}"
+          CHANGE_REASON="${{ steps.bootcheck.outputs.change_reason }}"
+          PREV_TAG="${{ steps.bootcheck.outputs.prev_tag }}"
+
+          ASSETS=(
+            "build/vmlinuz"
+            "build/tenkei-initramfs.img"
+            "build/yggdrasil-${VERSION}.tar.xz"
+            "build/yggdrasil-${VERSION}.qcow2"
+            "build/yggdrasil-${VERSION}-oci.tar"
+            "build/tenkei-kernel-${VERSION}-oci.tar"
+          )
+          for a in "${ASSETS[@]}"; do
+            [[ -f "$a" ]] || { echo "ERROR: missing release asset: $a"; exit 1; }
+          done
+
+          if [[ "$BOOT_TEST_REQUIRED" == "true" ]]; then
+            echo "Creating DRAFT release — boot-path change detected: $CHANGE_REASON"
+            BODY=/tmp/release-body.md
+            # Note: YAML's block-scalar strips the common leading indent,
+            # so by the time bash runs this heredoc the content is flush-left.
+            cat > "$BODY" <<EOF
+          ## Pre-publish checklist — manual VM boot test required
+
+          This release changes kernel or initramfs code (${CHANGE_REASON}).
+          Run the full VM boot smoke test before publishing:
+
+          - [ ] Download the artifacts below to a KVM-capable host (e.g. droste VM 300).
+          - [ ] Run \`scripts/yggdrasil-smoke-test.sh\` against them.
+          - [ ] Confirm all 5 serial-console checkpoints pass (kernel start,
+                initramfs, systemd PID 1, default target, login prompt).
+          - [ ] Flip this draft release to published.
+
+          ---
+
+          EOF
+
+            # Append auto-generated notes via the API (works with or without a
+            # known previous tag — omit previous_tag_name if none).
+            if [[ -n "$PREV_TAG" ]]; then
+              gh api "/repos/${{ github.repository }}/releases/generate-notes" \
+                -f tag_name="$TAG" \
+                -f previous_tag_name="$PREV_TAG" \
+                --jq .body >> "$BODY"
+            else
+              gh api "/repos/${{ github.repository }}/releases/generate-notes" \
+                -f tag_name="$TAG" \
+                --jq .body >> "$BODY"
+            fi
+
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --draft \
+              --notes-file "$BODY" \
+              "${ASSETS[@]}"
+          else
+            echo "Creating PUBLISHED release — no boot-path changes"
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --generate-notes \
+              "${ASSETS[@]}"
+          fi
+
+      - name: Summary (workflow_dispatch)
+        if: steps.ver.outputs.is_tag_push != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          echo "workflow_dispatch run completed for VERSION=$VERSION."
+          echo "Skipped: GHCR push and GitHub Release creation."
+          echo "Built + tested artifacts:"
+          ls -l \
+            build/vmlinuz \
+            build/tenkei-initramfs.img \
+            "build/yggdrasil-${VERSION}.tar.xz" \
+            "build/yggdrasil-${VERSION}.qcow2" \
+            "build/yggdrasil-${VERSION}-oci.tar" \
+            "build/tenkei-kernel-${VERSION}-oci.tar"
