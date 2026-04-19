@@ -357,6 +357,14 @@ apt-get autoremove -y || true
 # Phase 2: Yggdrasil-specific strip (cloud-init, polkit, resolved, ...)
 # None of these are essential, so --allow-remove-essential isn't required;
 # the grep filter is kept for output cleanliness.
+#
+# Re-filter after the phase-1 autoremove: entries like cloud-image-utils,
+# cloud-utils, qemu-utils, genisoimage may already be gone (reaped as orphans
+# once their parents were purged). Feeding stale entries to apt-get remove
+# exits 100 and — under `set -euo pipefail` — kills the whole script.
+filter_installed /tmp/ygg-strip-installed.txt /tmp/ygg-strip-installed.txt.2
+mv /tmp/ygg-strip-installed.txt.2 /tmp/ygg-strip-installed.txt
+
 if [[ -s /tmp/ygg-strip-installed.txt ]]; then
     echo "Purging Yggdrasil-specific packages..."
     xargs apt-get remove -y --purge < /tmp/ygg-strip-installed.txt 2>&1 \
