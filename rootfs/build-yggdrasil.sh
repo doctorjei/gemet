@@ -626,6 +626,12 @@ export DEBIAN_FRONTEND=noninteractive
 
 systemctl enable systemd-networkd.service
 
+# Yggdrasil is a pure base: it ships no SSH host keys (no cloud-init to
+# generate them). Disable sshd by default so the unit doesn't fail on
+# boot. Downstream tiers drop keys into /etc/ssh/ and re-enable via
+# 'systemctl enable ssh'. See docs/yggdrasil.md.
+systemctl disable ssh.service ssh.socket 2>/dev/null || true
+
 if [[ "\${SSHKEY_STAGED_INNER}" == "true" ]]; then
     systemctl enable yggdrasil-sshkey-sync.service
 fi

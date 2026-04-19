@@ -17,8 +17,9 @@ A stripped-down Debian 13 genericcloud rootfs with:
 
 - systemd as PID 1 (udev, dbus kept; polkitd and resolved/timesyncd dropped)
 - systemd-networkd configured for DHCP on all ethernet interfaces
-- openssh-server with idempotent key-sync on boot via
-  `/etc/yggdrasil/authorized_keys`
+- openssh-server installed but **disabled by default** (no host keys
+  ship — see "SSH host keys" below); idempotent `authorized_keys` sync
+  via `/etc/yggdrasil/authorized_keys` still runs at every boot
 - busybox providing shim coverage for 18 swapped-out packages
   (hostname, gzip, sed, grep, findutils, iproute2, etc.)
 - nano, vim-tiny, curl, tcpdump, iptables kept for "poke around" ergonomics
@@ -328,6 +329,30 @@ preserved).
 
 Comments (lines starting with `#`) and blank lines in the source file
 are ignored.
+
+## SSH host keys
+
+Yggdrasil ships **no** `/etc/ssh/ssh_host_*_key` files and **ssh.service
+is disabled by default**. The Debian `genericcloud` base relies on
+cloud-init to generate host keys at first boot; Yggdrasil strips
+cloud-init, so that path is unavailable. Rather than shipping identical
+keys in every instance or running an unconditional first-boot keygen
+(either of which bakes a policy into a base image that shouldn't have
+one), host-key provisioning is left to the downstream tier.
+
+To enable SSH in a downstream image, do two things in the tier's
+Containerfile (or equivalent):
+
+1. Place host keys under `/etc/ssh/` — either generate them at build
+   time (`ssh-keygen -A -f /etc/ssh`), inject pre-generated keys, or
+   ship a oneshot unit that runs `ssh-keygen -A` on first boot.
+2. Re-enable the service: `systemctl enable ssh.service ssh.socket`.
+
+The `authorized_keys` sync contract above is independent of this — it
+runs regardless of whether sshd is enabled, so keys staged in
+`/etc/yggdrasil/authorized_keys` land in `/root/.ssh/authorized_keys`
+even on a base Yggdrasil boot (ready for the moment a downstream tier
+turns sshd on).
 
 ## Downstream consumption
 
