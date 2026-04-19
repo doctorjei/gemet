@@ -168,13 +168,19 @@ tenkei/
 |   +-- test-yggdrasil-lxc.sh     # Yggdrasil LXC smoke test
 |   +-- test-yggdrasil-vm.sh      # Yggdrasil virtiofs VM smoke test
 |   +-- test-yggdrasil-disk.sh    # Yggdrasil qcow2 boot smoke test
+|   +-- yggdrasil-smoke-test.sh   # Portable VM boot smoke test (ships with releases)
+|   +-- ci-structural-tests.sh    # CI Tier 1: file/structure checks on build/ artifacts
+|   +-- ci-systemd-test.sh        # CI Tier 2: rootless podman + systemd-in-OCI health
 |   +-- create-test-rootfs.sh     # Creates minimal Debian rootfs for boot testing
 |   +-- git-upstream.sh           # Manage upstream kata subtree imports
 +-- docs/
 |   +-- user-guide.md             # Usage documentation
+|   +-- releases.md               # Release artifact inventory + CI process
 |   +-- kernel-as-oci.md          # kernel-as-OCI artifact reference
 |   +-- yggdrasil.md              # Yggdrasil artifact reference
 |   +-- pve-integration-spec.md   # PVE config requirements for kento
++-- .github/workflows/
+|   +-- release.yml               # Tag-triggered build/test/publish pipeline
 +-- upstream/
 |   +-- kernel/              # Kata kernel configs, patches, build script
 |   +-- osbuilder/           # Kata rootfs/initrd/image builders
@@ -182,6 +188,26 @@ tenkei/
 +-- LICENSE.md               # GPLv3
 +-- build/                   # Output: vmlinuz + initramfs + yggdrasil artifacts (gitignored)
 ```
+
+## Releases
+
+Tagged releases (`v*`) are built automatically by
+`.github/workflows/release.yml`. Each release publishes:
+
+- **GitHub Release attachments** at
+  `github.com/doctorjei/tenkei/releases` — `vmlinuz`,
+  `tenkei-initramfs.img`, `yggdrasil-<ver>.{tar.xz,qcow2}`, and OCI
+  archives for both images.
+- **OCI images on GHCR** —
+  `ghcr.io/doctorjei/tenkei/yggdrasil:<ver>` and
+  `ghcr.io/doctorjei/tenkei/tenkei-kernel:<ver>` (both also tagged
+  `:latest`).
+
+Consumers can `podman pull` the GHCR images or download the tarball/qcow2
+forms directly from the release page. See
+[docs/releases.md](docs/releases.md) for the full artifact inventory,
+the draft-on-kernel-change gate, and how to trigger a manual pipeline
+run via `workflow_dispatch`.
 
 ## Upstream Sync
 

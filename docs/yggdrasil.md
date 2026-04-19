@@ -241,6 +241,12 @@ same rootfs work directory in a single build invocation:
 | `.tar.xz`   | `build/yggdrasil-<ver>.tar.xz`            | `lxc-create -t local --rootfs=<tarball>` |
 | qcow2       | `build/yggdrasil-<ver>.qcow2`             | External boot via `qemu -kernel -initrd` |
 
+Tagged releases publish the OCI image to GHCR at
+`ghcr.io/doctorjei/tenkei/yggdrasil:<ver>` (and `:latest`), and the
+tar.xz + qcow2 + `.oci.tar` forms as GitHub Release attachments. See
+[releases.md](releases.md) for pull commands and the full artifact
+inventory.
+
 ### Converting an existing OCI archive
 
 `scripts/extract-oci.sh` is a pure-shell utility (no podman/umoci/root)

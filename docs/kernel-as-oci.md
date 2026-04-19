@@ -21,6 +21,18 @@ Purpose: let downstream consumers pull tenkei's kernel and initramfs via
 `COPY --from=tenkei-kernel:<ver>` rather than having tenkei's source tree
 or build output staged on disk next to their Containerfile.
 
+## Pulling from GHCR
+
+Tagged releases are published to
+`ghcr.io/doctorjei/tenkei/tenkei-kernel:<ver>` (and `:latest`):
+
+```bash
+podman pull ghcr.io/doctorjei/tenkei/tenkei-kernel:1.2.0
+```
+
+See [releases.md](releases.md) for the full artifact inventory and the
+draft-gate process for kernel/initramfs-touching releases.
+
 ## Build
 
 First produce the raw build outputs, then package them:
@@ -53,7 +65,7 @@ Two files, one layer, no runtime behavior.
 The intended consumption pattern is a multi-stage Containerfile:
 
 ```dockerfile
-FROM tenkei-kernel:1.1.0 AS tenkei-kernel
+FROM ghcr.io/doctorjei/tenkei/tenkei-kernel:1.2.0 AS tenkei-kernel
 
 FROM debian:bookworm  # or yggdrasil:<ver>, etc.
 COPY --from=tenkei-kernel /boot/vmlinuz /boot/vmlinuz
@@ -65,6 +77,9 @@ COPY --from=tenkei-kernel /boot/initramfs.img /boot/initramfs.img
 
 This replaces the older pattern of staging `vmlinuz` + `initramfs.img`
 next to the Containerfile and using direct `COPY` statements.
+
+For consumers building locally against an unpublished version,
+`localhost/tenkei-kernel:<ver>` works the same way as the GHCR tag.
 
 ## Version compatibility
 
@@ -112,9 +127,9 @@ kernel-as-OCI gives you the boot stack. A "full VM image" Containerfile
 typically pulls from both:
 
 ```dockerfile
-FROM tenkei-kernel:1.1.0 AS tenkei-kernel
+FROM ghcr.io/doctorjei/tenkei/tenkei-kernel:1.2.0 AS tenkei-kernel
 
-FROM yggdrasil:1.1.0
+FROM ghcr.io/doctorjei/tenkei/yggdrasil:1.2.0
 COPY --from=tenkei-kernel /boot/vmlinuz /boot/vmlinuz
 COPY --from=tenkei-kernel /boot/initramfs.img /boot/initramfs.img
 
@@ -123,4 +138,4 @@ COPY --from=tenkei-kernel /boot/initramfs.img /boot/initramfs.img
 
 ---
 
-*Last updated: 2026-04-19 (tenkei 1.1.0, Phase 7)*
+*Last updated: 2026-04-19 (tenkei 1.2.0 + release automation)*

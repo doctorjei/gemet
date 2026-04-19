@@ -6,6 +6,12 @@ Tenkei builds a minimal Linux kernel and initramfs purpose-built for booting
 OCI container images as virtual machines. It replaces traditional VM disk images
 with a virtiofs-mounted rootfs served directly from the host's Podman layer store.
 
+Pre-built artifacts (kernel, initramfs, Yggdrasil rootfs in multiple forms)
+are attached to every tagged release, and OCI images are published to GHCR.
+Most consumers pull pre-built artifacts rather than building locally — see
+[releases.md](releases.md) for the artifact inventory and pull commands.
+The rest of this guide walks through building from source.
+
 ## Components
 
 ### Kernel
