@@ -62,4 +62,5 @@ if [ "$mount_ok" -ne 1 ]; then
 	exec /bin/sh
 fi
 
+echo "tenkei: mounted $ROOT as $ROOTFSTYPE; switching root."
 exec switch_root /newroot /sbin/init
