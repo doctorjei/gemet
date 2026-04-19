@@ -202,6 +202,63 @@ Key requirements for a VM-bootable image:
 - systemd-networkd with a DHCP `.network` file for virtio NICs
 - `udev` and `systemd-sysv` installed for full systemd boot
 
+## Kernel as OCI image
+
+In addition to the raw files under `build/`, tenkei can publish its kernel
+and initramfs as a single-layer OCI image. This lets downstream image builds
+pull the files in via a multi-stage `COPY --from=` instead of shipping them
+out-of-band alongside the Containerfile.
+
+The OCI image is an *additional* artifact — the raw `build/vmlinuz` and
+`build/tenkei-initramfs.img` outputs still exist and remain the primary
+build product. Nothing that consumes the raw files needs to change.
+
+### Building
+
+First produce the raw build outputs, then package them:
+
+```bash
+bash scripts/build-kernel.sh 6.12.8        # populates build/
+bash scripts/build-kernel-oci.sh           # uses ./VERSION (e.g. 1.0.1)
+# or
+bash scripts/build-kernel-oci.sh 1.0.1     # explicit version
+```
+
+The resulting image is tagged `tenkei-kernel:<version>` and also
+`tenkei-kernel:latest` for convenience.
+
+### Image contents
+
+Single layer, two files:
+
+```
+/boot/vmlinuz
+/boot/initramfs.img
+```
+
+Nothing else — no shell, no libc, no metadata beyond what `FROM scratch`
+implies. The image is only useful as a source in a multi-stage build.
+
+### Downstream usage
+
+A VM-bootable image can pull tenkei's kernel and initramfs with a
+multi-stage Containerfile:
+
+```dockerfile
+FROM tenkei-kernel:1.0.1 AS tenkei-kernel
+
+FROM debian:bookworm
+COPY --from=tenkei-kernel /boot/vmlinuz /boot/vmlinuz
+COPY --from=tenkei-kernel /boot/initramfs.img /boot/initramfs.img
+
+# ... rest of the VM-bootable image setup (empty fstab, password,
+# systemd-networkd DHCP, udev, systemd-sysv — see above)
+```
+
+This replaces the `COPY vmlinuz /boot/vmlinuz` + `COPY initramfs.img
+/boot/initramfs.img` pattern shown in the previous section, which assumed
+the files were staged next to the Containerfile.
+
 ## Kernel Configuration
 
 ### Fragment system

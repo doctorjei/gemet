@@ -1,0 +1,20 @@
+# tenkei kernel-as-OCI
+#
+# Single-layer OCI image containing tenkei's prebuilt kernel and initramfs.
+# Companion artifact to the raw files that ship under build/.
+#
+# Downstream consumers use this image via multi-stage COPY --from= to
+# pull /boot/vmlinuz and /boot/initramfs.img into their own VM-bootable
+# OCI images without needing tenkei's source tree or build output on hand.
+#
+# Expected build context:
+#   vmlinuz         — tenkei kernel (from build/vmlinuz)
+#   initramfs.img   — tenkei initramfs (from build/tenkei-initramfs.img,
+#                     renamed during staging)
+#
+# Built by scripts/build-kernel-oci.sh.
+
+FROM scratch
+
+COPY vmlinuz /boot/vmlinuz
+COPY initramfs.img /boot/initramfs.img
