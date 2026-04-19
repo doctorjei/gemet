@@ -35,6 +35,22 @@ Host                              VM
 The VM boots in about 5 seconds with minimal memory overhead. The rootfs is shared
 from the host -- no disk image to create, convert, or resize.
 
+## Artifacts
+
+Tenkei produces two families of outputs. The raw files under `build/` are
+the primary artifact; the OCI / tarball / qcow2 forms are additive, for
+consumers that want referenceable artifact URLs or self-contained disk
+images.
+
+| Form     | Output                                | Details                                 |
+|----------|---------------------------------------|-----------------------------------------|
+| Raw      | `build/vmlinuz`                       | compressed kernel (~7.5 MB)             |
+| Raw      | `build/tenkei-initramfs.img`          | initramfs (~1.1 MB)                     |
+| OCI      | `tenkei-kernel:<ver>`                 | kernel-as-OCI — see [docs/kernel-as-oci.md](docs/kernel-as-oci.md) |
+| OCI      | `yggdrasil:<ver>`                     | minimal Debian 13 + systemd userland — see [docs/yggdrasil.md](docs/yggdrasil.md) |
+| Tarball  | `build/yggdrasil-<ver>.tgz`           | Yggdrasil rootfs for `lxc-create`       |
+| qcow2    | `build/yggdrasil-<ver>.qcow2`         | bootable disk image for `qemu -drive`   |
+
 ## Relationship to Kata Containers
 
 Tenkei borrows kernel configs and build tooling from
@@ -89,6 +105,13 @@ Build dependencies (Debian/Ubuntu):
 apt install build-essential flex bison bc libelf-dev libssl-dev busybox-static
 ```
 
+Optional OCI artifacts: `bash scripts/build-kernel-oci.sh` packages the
+kernel + initramfs as `tenkei-kernel:<ver>` for downstream multi-stage
+consumption, and `sudo bash rootfs/build-yggdrasil.sh` produces the
+companion `yggdrasil:<ver>` minimal Debian userland. See
+[docs/kernel-as-oci.md](docs/kernel-as-oci.md) and
+[docs/yggdrasil.md](docs/yggdrasil.md).
+
 ### Boot Test
 
 ```bash
@@ -113,22 +136,36 @@ Run `bash scripts/test-boot.sh --help` for all options.
 ```
 tenkei/
 +-- initramfs/
-|   +-- init                 # Minimal virtiofs mount + switch_root
+|   +-- init                 # Minimal virtiofs / block-dev mount + switch_root
 |   +-- build.sh             # Packages initramfs (busybox + init)
++-- kernel/
+|   +-- Containerfile        # kernel-as-OCI image source
++-- rootfs/
+|   +-- build-yggdrasil.sh        # Yggdrasil OCI + .tgz builder
+|   +-- build-yggdrasil-disk.sh   # Yggdrasil qcow2 builder
+|   +-- seed-target.txt           # package keep-list
+|   +-- networkd/                 # staged systemd-networkd config
+|   +-- sshkey/                   # staged ssh-key sync service + script
 +-- scripts/
-|   +-- build-kernel.sh      # Kernel build wrapper (setup/build/install)
-|   +-- test-boot.sh         # QEMU + virtiofsd boot test helper
-|   +-- create-test-rootfs.sh  # Creates minimal Debian rootfs for boot testing
-|   +-- git-upstream.sh      # Manage upstream kata subtree imports
+|   +-- build-kernel.sh           # Kernel build wrapper (setup/build/install)
+|   +-- build-kernel-oci.sh       # Package kernel + initramfs as OCI image
+|   +-- test-boot.sh              # QEMU + virtiofsd boot test helper
+|   +-- test-yggdrasil-lxc.sh     # Yggdrasil LXC smoke test
+|   +-- test-yggdrasil-vm.sh      # Yggdrasil virtiofs VM smoke test
+|   +-- test-yggdrasil-disk.sh    # Yggdrasil qcow2 boot smoke test
+|   +-- create-test-rootfs.sh     # Creates minimal Debian rootfs for boot testing
+|   +-- git-upstream.sh           # Manage upstream kata subtree imports
 +-- docs/
-|   +-- user-guide.md        # Usage documentation
-|   +-- pve-integration-spec.md  # PVE config requirements for kento
+|   +-- user-guide.md             # Usage documentation
+|   +-- kernel-as-oci.md          # kernel-as-OCI artifact reference
+|   +-- yggdrasil.md              # Yggdrasil artifact reference
+|   +-- pve-integration-spec.md   # PVE config requirements for kento
 +-- upstream/
 |   +-- kernel/              # Kata kernel configs, patches, build script
 |   +-- osbuilder/           # Kata rootfs/initrd/image builders
 +-- VERSION                  # Version string
 +-- LICENSE.md               # GPLv3
-+-- build/                   # Output: vmlinuz + initramfs (gitignored)
++-- build/                   # Output: vmlinuz + initramfs + yggdrasil artifacts (gitignored)
 ```
 
 ## Upstream Sync
