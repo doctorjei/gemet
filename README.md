@@ -47,9 +47,16 @@ images.
 | Raw      | `build/vmlinuz`                       | compressed kernel (~7.5 MB)             |
 | Raw      | `build/tenkei-initramfs.img`          | initramfs (~1.1 MB)                     |
 | OCI      | `tenkei-kernel:<ver>`                 | kernel-as-OCI — see [docs/kernel-as-oci.md](docs/kernel-as-oci.md) |
-| OCI      | `yggdrasil:<ver>`                     | minimal Debian 13 + systemd userland — see [docs/yggdrasil.md](docs/yggdrasil.md) |
+| OCI      | `yggdrasil:<ver>`                     | minimal Debian 13 + systemd userland (~210-230 MB) — see [docs/yggdrasil.md](docs/yggdrasil.md) |
 | Tarball  | `build/yggdrasil-<ver>.tar.xz`        | Yggdrasil rootfs for `lxc-create`       |
 | qcow2    | `build/yggdrasil-<ver>.qcow2`         | bootable disk image for `qemu -drive`   |
+
+As of 1.2.0, the Yggdrasil build applies a multi-phase shrink (BusyBox
+swap, targeted purges, doc/locale/man sweep, python library trim) that
+reduces the rootfs from ~377 MB down to ~210-230 MB. Recovery scripts
+(`yggdrasil-unshim`, `yggdrasil-rehydrate`) ship inside the image for
+downstream tiers that need any dropped package or wiped doc tree back —
+see [docs/yggdrasil.md](docs/yggdrasil.md) for details.
 
 ## Relationship to Kata Containers
 

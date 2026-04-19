@@ -5,6 +5,12 @@ as the base layer for downstream rootfs builds (droste tiers, kento test
 fixtures, user-defined images) and is published in three artifact forms: OCI
 image, `.tar.xz` tarball, and qcow2 disk image.
 
+As of 1.2.0, the build applies a multi-phase shrink pass (BusyBox swap,
+targeted purges, doc/locale/man sweep, python library trim) that reduces
+the rootfs from ~377 MB to ~210-230 MB (~40% reduction). Recovery tooling
+ships in the image so downstream consumers can reverse individual
+shadows or fully rehydrate when needed.
+
 ## What it is
 
 A stripped-down Debian 13 genericcloud rootfs with:
@@ -13,13 +19,84 @@ A stripped-down Debian 13 genericcloud rootfs with:
 - systemd-networkd configured for DHCP on all ethernet interfaces
 - openssh-server with idempotent key-sync on boot via
   `/etc/yggdrasil/authorized_keys`
-- busybox, nano, vim-tiny, curl, wget, tcpdump, traceroute, iptables for
-  basic "poke around" ergonomics
-- Locales for 15 common regions (~12 MB combined)
+- busybox providing shim coverage for 18 swapped-out packages
+  (hostname, gzip, sed, grep, findutils, iproute2, etc.)
+- nano, vim-tiny, curl, tcpdump, iptables kept for "poke around" ergonomics
+- bash kept as `/bin/sh` (via dpkg-divert) — busybox's ash is not the
+  default shell
+- Locales for 15 common regions compiled into `/usr/lib/locale/locale-archive`
+  (the `locales` package itself is purged after generation)
 
 Kernel and bootloader packages are purged: Yggdrasil boots via an external
 kernel + initramfs (tenkei's own — see [kernel-as-oci](kernel-as-oci.md))
 rather than a self-contained boot stack.
+
+## Shrink phases
+
+`rootfs/build-yggdrasil.sh` runs five strip phases (plus the initial
+debootstrap). Phase 0 is the historical 1.1.0 pass; phases 1-4 were
+added in 1.2.0. Build-time manifests for every shim and purge land in
+`/usr/share/yggdrasil/` so downstream can introspect or reverse the
+changes — see [Recovery tooling](#recovery-tooling) below.
+
+| Phase | Scope                            | Approx saving |
+|-------|----------------------------------|---------------|
+| 0     | Kernel/boot + Yggdrasil purges   | (baseline)    |
+| 1     | BusyBox swap (18 packages)       | ~36 MB        |
+| 2     | Targeted purges + locales trim   | ~30 MB        |
+| 3     | Doc/info/man/locale sweep        | ~71 MB        |
+| 4     | Python library trim (31 pkgs)    | ~13 MB        |
+| —     | **Total (phases 1-4)**           | **~150 MB**   |
+
+### Phase 0 — Kernel/boot + Yggdrasil strip (baseline, unchanged from 1.1.0)
+
+Purges the kernel/bootloader chain and the Yggdrasil-specific package
+list, then `apt autoremove --purge` to reclaim orphaned deps. Also wipes
+`/boot/*` and `/lib/modules/*` and replaces `/etc/fstab` with an empty
+placeholder (stale UUID mounts from genericcloud hang boot in
+VM/container contexts). Passing `--no-shrink` to the build script stops
+here and produces a 1.1.0-equivalent image.
+
+### Phase 1 — BusyBox swap
+
+Installs `busybox` and purges 18 packages whose utilities BusyBox
+covers: `hostname`, `iputils-ping`, `gzip`, `cpio`, `sed`, `coreutils`,
+`grep`, `findutils`, `diffutils`, `less`, `wget`, `kmod`,
+`netcat-openbsd`, `traceroute`, `fdisk`, `psmisc`, `iproute2`, `dash`.
+`/bin/sh` is repointed at `bash` via `dpkg-divert` before `dash` is
+purged (BusyBox's `ash` is intentionally not the default shell).
+
+Shim installation uses `busybox --install -s` into a scratch directory,
+then mirrors the resulting symlinks into the live FS only where the
+target path is empty. This exists-check naturally gates shims against
+packages that are kept — `systemd-sysv`, `util-linux`, `procps`,
+`shadow`, `vim-tiny`, `bash` all retain their own binaries.
+
+### Phase 2 — Targeted purges and locale compaction
+
+Purges `libc-l10n`, `file`, `libmagic1t64`, and `libmagic-mgc`. Then
+runs `locale-gen` to compile the 15-region locale archive at
+`/usr/lib/locale/locale-archive`, and **after** that purges the
+`locales` package itself. The compiled archive survives because it is
+not package-owned — apps calling `setlocale` still find their locale
+data.
+
+### Phase 3 — Doc/info/man/locale sweep
+
+Wipes `/usr/share/doc` and `/usr/share/info` entirely. Trims
+`/usr/share/man` down to the English man sections, and trims
+`/usr/share/locale` to the 15 locale-gen'd families (`en`, `zh`, `hi`,
+`es`, `ar`, `fr`, `bn`, `pt`, `id`, `ur`, `de`, `ja`, `ko`, plus
+region variants). `apt` cache and `/var/lib/apt/lists/*` are cleaned
+last.
+
+### Phase 4 — Python library purge
+
+Purges 31 `python3-*` packages that have no non-Python reverse
+dependencies (pulled in by cloud-init / reportbug / apt-listchanges
+and left as orphans by autoremove's conservative rules). The base
+interpreter stack is kept: `python3`, `python3.13`, `python3.13-minimal`,
+`libpython3.13-minimal`, `libpython3.13-stdlib`.
 
 ## What's kept vs dropped
 
@@ -29,21 +106,24 @@ authoritative package lists):
 
 **Kept** (beyond the genericcloud default):
 
-- `busybox` — kept for minimal-environment ergonomics
+- `busybox` — core ergonomics + shim coverage for 18 swapped packages
+- `bash` — retained as `/bin/sh` (dpkg-diverted before `dash` purge)
 - `vim-tiny` — provides `/usr/bin/vi` after `vim`/`vim-common`/`vim-runtime`
   are dropped
 - `nano` — explicit install (Debian default `$EDITOR`)
-- `curl`, `wget`, `tcpdump`, `traceroute`, `iptables` — convenience tools
-  that survive autoremove
+- `curl`, `tcpdump`, `iptables` — convenience tools that survive
+  autoremove (`wget` and `traceroute` now come from busybox)
+- Python interpreter stack (`python3`, `python3.13`,
+  `python3.13-minimal`, `libpython3.13-minimal`, `libpython3.13-stdlib`)
 
-**Dropped — kernel/boot** (via PURGE_PACKAGES):
+**Dropped — kernel/boot** (Phase 0):
 
 - `linux-image-cloud-amd64`, `linux-sysctl-defaults`
 - `grub-*`, `shim-*`, `mokutil`, `os-prober`, UEFI libs
 - `netplan.io` + `netplan-generator` + `python3-netplan`
 - `cloud-initramfs-growroot`, `dracut-install`, `pciutils`
 
-**Dropped — Yggdrasil-specific**:
+**Dropped — Yggdrasil-specific** (Phase 0):
 
 - `cloud-init`, `cloud-guest-utils`, `cloud-image-utils`, `cloud-utils`
 - `polkitd`, `libpolkit-agent-1-0`, `libpolkit-gobject-1-0`
@@ -59,33 +139,101 @@ authoritative package lists):
   name resolution still work via libc's `getaddrinfo`)
 - `vim`, `vim-common`, `vim-runtime` (replaced by `vim-tiny`)
 
-`apt autoremove --purge` runs after both strip phases; this reclaims
-orphaned deps (e.g. much of the python3-* ecosystem pulled in by
-cloud-init / reportbug / apt-listchanges).
+**Dropped — BusyBox swap** (Phase 1):
 
-Also cleaned up at the end: `/boot/*` and `/lib/modules/*` are removed,
-and `/etc/fstab` is replaced with an empty placeholder (stale UUID mounts
-from genericcloud hang boot in VM/container contexts).
+`hostname`, `iputils-ping`, `gzip`, `cpio`, `sed`, `coreutils`, `grep`,
+`findutils`, `diffutils`, `less`, `wget`, `kmod`, `netcat-openbsd`,
+`traceroute`, `fdisk`, `psmisc`, `iproute2`, `dash`. See
+`/usr/share/yggdrasil/busybox-shim.manifest` for the exact
+package-to-shim mapping written at build time.
+
+**Dropped — targeted** (Phase 2):
+
+- `libc-l10n`, `file`, `libmagic1t64`, `libmagic-mgc`
+- `locales` (purged after `locale-gen` compiles the archive;
+  `/usr/lib/locale/locale-archive` survives)
+
+**Dropped — Python libraries** (Phase 4):
+
+31 `python3-*` packages with no non-Python reverse deps. See
+`/usr/share/yggdrasil/purged-packages.list` for the exact list.
+
+If a downstream consumer needs any of the dropped packages back, see
+[Recovery tooling](#recovery-tooling).
+
+## Recovery tooling
+
+Two scripts ship at `/usr/share/yggdrasil/` with symlinks in
+`/usr/local/bin/`. They read the build-time manifests also installed
+at `/usr/share/yggdrasil/`:
+
+- `purged-packages.list` — one per line, every package purged across
+  phases 1-4 (and the Phase 2 sub-purge of `locales`)
+- `busybox-shim.manifest` — tab-separated `<pkg>\t<shim-path>`
+- `wiped-dirs.list` — top-level dirs wiped in Phase 3
+  (`/usr/share/doc`, `/usr/share/info`, `/usr/share/locale`,
+  `/usr/share/man`)
+
+### `yggdrasil-unshim`
+
+Removes the BusyBox shim symlinks for one or more swapped packages so
+the real package can be reinstalled cleanly.
+
+```bash
+yggdrasil-unshim --list                # show all shimmed packages
+yggdrasil-unshim grep findutils        # remove shims for these pkgs
+yggdrasil-unshim --all                 # remove every shim
+apt-get install grep findutils         # reinstall real binaries
+```
+
+Use this when a downstream tier needs a specific utility's full
+behavior (e.g. GNU `grep -P` perl regexes that busybox doesn't cover).
+
+### `yggdrasil-rehydrate`
+
+One-shot full restoration. Removes all shims, reinstalls every
+package listed in `purged-packages.list`, then runs `apt-get install
+--reinstall` over the entire installed package set to repopulate the
+wiped `/usr/share/{doc,info,man,locale}` trees. Takes 2-5 minutes.
+
+```bash
+yggdrasil-rehydrate --dry-run          # list actions without executing
+yggdrasil-rehydrate                    # perform full rehydration
+```
+
+After rehydration the image is functionally equivalent to a fresh
+Debian 13 install of the same package set — useful for debugging or
+for distributing a "fat" base to environments where the shrink isn't
+worth the trade-off.
 
 ## Build
 
 ```bash
-sudo bash rootfs/build-yggdrasil.sh           # OCI + .tar.xz (default)
-sudo bash rootfs/build-yggdrasil-disk.sh      # qcow2 (reads OCI or .tar.xz)
+sudo bash rootfs/build-yggdrasil.sh           # OCI + .tar.xz + qcow2 (default)
 ```
 
-`build-yggdrasil.sh` produces OCI image `yggdrasil:<version>` (version from
-tenkei's `VERSION` file) and `build/yggdrasil-<version>.tar.xz`. Flags to
-selectively skip outputs: `--no-import` (no OCI image), `--no-txz`
-(no tarball). Both flags are independent.
+`build-yggdrasil.sh` produces all three artifacts by default:
 
-`build-yggdrasil-disk.sh` produces `build/yggdrasil-<version>.qcow2` from
-either the OCI image (default) or an existing `.tar.xz` (via `--from-txz`).
+- OCI image `yggdrasil:<version>` (version from tenkei's `VERSION` file)
+- `build/yggdrasil-<version>.tar.xz`
+- `build/yggdrasil-<version>.qcow2`
+
+The qcow2 is extracted from the built rootfs using `debugfs rdump`
+(works in environments without a loadable `nbd` module, e.g. dev
+containers) rather than `qemu-nbd`.
+
+Flags to selectively skip outputs (independent, any combination):
+
+- `--no-import` — don't import into podman as an OCI image
+- `--no-txz` — don't produce the tarball
+- `--no-qcow2` — don't produce the disk image
+- `--no-shrink` — stop after Phase 0 (produces a 1.1.0-equivalent
+  image, useful as a fallback if a shrink phase regresses something)
 
 ## Artifact forms
 
 Yggdrasil is published in three artifact forms, all produced from the
-same rootfs work directory:
+same rootfs work directory in a single build invocation:
 
 | Form        | Output                                    | Primary consumer                         |
 |-------------|-------------------------------------------|------------------------------------------|
@@ -164,9 +312,9 @@ layering. The canonical pattern combines Yggdrasil with tenkei's
 VM-bootable image in a single Containerfile:
 
 ```dockerfile
-FROM tenkei-kernel:1.1.0 AS tenkei-kernel
+FROM tenkei-kernel:1.2.0 AS tenkei-kernel
 
-FROM yggdrasil:1.1.0
+FROM yggdrasil:1.2.0
 COPY --from=tenkei-kernel /boot/vmlinuz /boot/vmlinuz
 COPY --from=tenkei-kernel /boot/initramfs.img /boot/initramfs.img
 
@@ -182,6 +330,11 @@ Downstream customizations are unrestricted — add packages, write config,
 create users, disable services. Yggdrasil's only expectation is that the
 ssh-key sync contract (`/etc/yggdrasil/authorized_keys`) remain intact
 if you want orchestrator-injected keys to keep working.
+
+If a downstream tier needs to reinstall a BusyBox-shimmed package or
+fully rehydrate the image, use `yggdrasil-unshim` or
+`yggdrasil-rehydrate` (see [Recovery tooling](#recovery-tooling)) from
+a `RUN` step in the tier's Containerfile.
 
 ## Testing
 
@@ -210,4 +363,4 @@ kernel + initramfs — no virtiofsd. Default SSH forward is `localhost:2223`
 
 ---
 
-*Last updated: 2026-04-19 (tenkei 1.1.0, Phase 7)*
+*Last updated: 2026-04-19 (tenkei 1.2.0, Yggdrasil rootfs-shrink)*

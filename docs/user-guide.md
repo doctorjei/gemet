@@ -220,7 +220,27 @@ image intended as the foundation for downstream rootfs builds (droste
 tiers, kento test fixtures, user-defined images). It ships in three
 artifact forms: OCI image, `.tar.xz` tarball, and qcow2 disk image.
 
-See [yggdrasil](yggdrasil.md) for the strip list, artifact forms, boot
+As of 1.2.0, the rootfs is ~210-230 MB (down from ~377 MB) thanks to a
+multi-phase shrink pass applied at build time: BusyBox swap for 18
+packages, targeted purges (`libc-l10n`, `file`, `libmagic*`, `locales`
+after `locale-gen`), doc/info/man/locale sweep, and a 31-package
+Python library trim.
+
+### Recovery tooling
+
+Two scripts ship inside the image at `/usr/share/yggdrasil/` with
+symlinks in `/usr/local/bin/`, backed by build-time manifests
+(`purged-packages.list`, `busybox-shim.manifest`, `wiped-dirs.list`):
+
+- `yggdrasil-unshim <pkg>...` — removes BusyBox shim symlinks so a
+  swapped package can be cleanly reinstalled. Also `--list` and `--all`.
+- `yggdrasil-rehydrate` — one-shot full restoration: removes all
+  shims, reinstalls every purged package, and
+  `apt-get install --reinstall`'s the full package set to repopulate
+  wiped `/usr/share/{doc,info,man,locale}`. 2-5 minutes. Supports
+  `--dry-run`.
+
+See [yggdrasil](yggdrasil.md) for the strip list, shrink phases, boot
 contracts, SSH-key sync, and the canonical downstream-consumption
 pattern.
 
