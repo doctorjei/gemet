@@ -59,9 +59,10 @@ dispatches:
 | unset                                   | defaults to virtiofs (back-compat with kento) |
 
 The block-device branch supports Yggdrasil's qcow2 artifact form: the disk
-has a single ext4 root partition and no bootloader; tenkei's kernel +
-initramfs boot it externally via `qemu -kernel … -initrd … -drive
-yggdrasil.qcow2 -append "root=/dev/vda1 rootfstype=ext4 …"`.
+is a partition-less ext4 filesystem with no bootloader (the whole device
+*is* the root filesystem — no partition table, no `/dev/vda1`); tenkei's
+kernel + initramfs boot it externally via `qemu -kernel … -initrd …
+-drive yggdrasil.qcow2 -append "root=/dev/vda rootfstype=ext4 …"`.
 
 On any mount failure, the init drops to `/bin/sh` (emergency shell).
 
@@ -239,6 +240,22 @@ symlinks in `/usr/local/bin/`, backed by build-time manifests
   `apt-get install --reinstall`'s the full package set to repopulate
   wiped `/usr/share/{doc,info,man,locale}`. 2-5 minutes. Supports
   `--dry-run`.
+
+### Converting an OCI archive to other forms
+
+`scripts/extract-oci.sh` is a pure-shell utility (no podman/umoci/root)
+that reads any OCI image archive and re-emits its merged rootfs as a
+directory, tarball, or bootable qcow2:
+
+```bash
+scripts/extract-oci.sh --dir   image.oci.tar /tmp/rootfs
+scripts/extract-oci.sh --tar   image.oci.tar rootfs.tar
+scripts/extract-oci.sh --qcow2 image.oci.tar rootfs.qcow2
+```
+
+Useful when you already have an OCI tarball (e.g.
+`podman save --format=oci-archive yggdrasil:<ver> > yggdrasil.oci.tar`)
+and want a disk image without re-running the full Yggdrasil build.
 
 See [yggdrasil](yggdrasil.md) for the strip list, shrink phases, boot
 contracts, SSH-key sync, and the canonical downstream-consumption
