@@ -1,18 +1,64 @@
 #!/bin/sh
 #
-# tenkei init — mount virtiofs rootfs and switch_root into it
+# tenkei init — mount rootfs (virtiofs or block device) and switch_root
 #
-# This is the /init script inside the initramfs. It expects the host to
-# serve the container rootfs via virtiofsd with the tag "rootfs".
+# This is the /init script inside the initramfs. Dispatches on kernel
+# cmdline:
+#
+#   root=rootfs rootfstype=virtiofs       → virtiofs mount (tag=rootfs),
+#                                            dax=inode if the host + kernel
+#                                            support it; graceful fallback
+#                                            otherwise (mount is retried
+#                                            without dax=inode).
+#   root=/dev/<dev> rootfstype=<fs>       → block-device mount (e.g. qcow2
+#                                            disk-image boot). ext4 is the
+#                                            expected fs for Yggdrasil's
+#                                            qcow2 artifact form.
+#   (unset / anything else)               → defaults to virtiofs (tag=rootfs)
+#                                            for back-compat with kento.
+#
+# On any mount failure, drops to an emergency /bin/sh.
 #
 
 mount -t devtmpfs devtmpfs /dev
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 
+# Parse root= and rootfstype= from /proc/cmdline
+ROOT=""
+ROOTFSTYPE=""
+for arg in $(cat /proc/cmdline); do
+	case "$arg" in
+		root=*)       ROOT="${arg#root=}" ;;
+		rootfstype=*) ROOTFSTYPE="${arg#rootfstype=}" ;;
+	esac
+done
+
+# Defaults preserve kento's current contract: virtiofs with tag=rootfs.
+[ -z "$ROOT" ]       && ROOT="rootfs"
+[ -z "$ROOTFSTYPE" ] && ROOTFSTYPE="virtiofs"
+
 mkdir -p /newroot
-if ! mount -t virtiofs rootfs /newroot -o dax=inode; then
-	echo "tenkei: virtiofs mount failed (tag=rootfs). Dropping to emergency shell."
+
+mount_ok=0
+case "$ROOTFSTYPE" in
+	virtiofs)
+		if mount -t virtiofs "$ROOT" /newroot -o dax=inode 2>/dev/null; then
+			mount_ok=1
+		elif mount -t virtiofs "$ROOT" /newroot; then
+			mount_ok=1
+		fi
+		;;
+	*)
+		if mount -t "$ROOTFSTYPE" "$ROOT" /newroot; then
+			mount_ok=1
+		fi
+		;;
+esac
+
+if [ "$mount_ok" -ne 1 ]; then
+	echo "tenkei: rootfs mount failed (root=$ROOT fstype=$ROOTFSTYPE)."
+	echo "Dropping to emergency shell."
 	exec /bin/sh
 fi
 

@@ -45,24 +45,25 @@ Requirements: build-essential, flex, bison, bc, libelf-dev, libssl-dev, busybox-
 
 Tenkei replaces Kata's agent-based initramfs with a minimal one that:
 
-1. Mounts a virtiofs share as the root filesystem
+1. Mounts the rootfs — virtiofs share or block device, selected by kernel cmdline
 2. Runs `switch_root` to pivot into it
 3. Execs `/sbin/init` (systemd or whatever the container image provides)
 
-The init script (`initramfs/init`):
+The init script parses `root=` and `rootfstype=` from `/proc/cmdline` and
+dispatches:
 
-```sh
-#!/bin/sh
-mount -t devtmpfs devtmpfs /dev
-mount -t proc proc /proc
-mount -t sysfs sysfs /sys
-mkdir -p /newroot
-if ! mount -t virtiofs rootfs /newroot -o dax=inode; then
-	echo "tenkei: virtiofs mount failed (tag=rootfs). Dropping to emergency shell."
-	exec /bin/sh
-fi
-exec switch_root /newroot /sbin/init
-```
+| cmdline                                 | mount                                    |
+|-----------------------------------------|------------------------------------------|
+| `root=rootfs rootfstype=virtiofs`       | virtiofs (tag `rootfs`), dax=inode if supported (graceful fallback) |
+| `root=/dev/vdaN rootfstype=ext4` (etc.) | block device (e.g. a qcow2 disk image)   |
+| unset                                   | defaults to virtiofs (back-compat with kento) |
+
+The block-device branch supports Yggdrasil's qcow2 artifact form: the disk
+has a single ext4 root partition and no bootloader; tenkei's kernel +
+initramfs boot it externally via `qemu -kernel … -initrd … -drive
+yggdrasil.qcow2 -append "root=/dev/vda1 rootfstype=ext4 …"`.
+
+On any mount failure, the init drops to `/bin/sh` (emergency shell).
 
 To build:
 
