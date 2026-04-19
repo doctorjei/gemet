@@ -1,0 +1,16 @@
+# Yggdrasil SSH authorized_keys sync — runs once per boot, merges any lines
+# from /etc/yggdrasil/authorized_keys into /root/.ssh/authorized_keys
+# (non-destructive; see docs/yggdrasil.md for the full contract).
+[Unit]
+Description=Yggdrasil SSH authorized_keys sync
+ConditionPathExists=/etc/yggdrasil/authorized_keys
+Before=ssh.service sshd.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/sync-sshkeys.sh
+
+[Install]
+WantedBy=multi-user.target

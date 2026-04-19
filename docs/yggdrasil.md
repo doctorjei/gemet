@@ -30,9 +30,33 @@ Produces OCI image `yggdrasil:<version>` (version from tenkei's `VERSION`
 file). The `--no-import` flag builds the rootfs without importing into
 podman/docker.
 
+## SSH key sync contract
+
+Orchestrators (kento, droste, humans) write authorized-keys lines to
+`/etc/yggdrasil/authorized_keys` in the rootfs before starting the
+container/VM. On each boot, `yggdrasil-sshkey-sync.service` runs
+`/usr/local/sbin/sync-sshkeys.sh`, which appends any new lines to
+`/root/.ssh/authorized_keys` (non-destructive — existing keys are
+preserved).
+
+- **Idempotent** — safe to run on every boot; duplicate lines are
+  skipped via exact-line `grep -Fx` check.
+- **Non-destructive** — keys are never removed or rewritten. Stale keys
+  must be cleaned up manually; editing `/etc/yggdrasil/authorized_keys`
+  and rebooting only adds, never subtracts.
+- **No-op when absent** — the systemd unit has
+  `ConditionPathExists=/etc/yggdrasil/authorized_keys`; if the file
+  doesn't exist the service exits cleanly without touching anything.
+- **Runs before ssh** — unit is ordered `Before=ssh.service sshd.service`
+  so keys are in place before the SSH daemon starts accepting
+  connections.
+
+Comments (lines starting with `#`) and blank lines in the source file
+are ignored.
+
 ## Plan and phases
 
 Full design and phased implementation plan: `~/playbook/plans/yggdrasil.md`.
 
-This file is a Phase 2 stub. Full documentation (artifact forms, SSH-key
-contract, downstream consumption pattern) lands in Phase 7.
+This file is a Phase 2/3 stub. Full documentation (artifact forms,
+downstream consumption pattern) lands in Phase 7.
