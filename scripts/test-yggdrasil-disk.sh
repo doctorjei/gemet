@@ -21,7 +21,8 @@
 # The cmdline passed to the kernel is:
 #   console=ttyS0 root=/dev/vda rootfstype=ext4
 # which matches the partition-less layout produced by
-# rootfs/build-yggdrasil-disk.sh. tenkei's initramfs dispatches on root= (see
+# rootfs/build-yggdrasil.sh (or scripts/extract-oci.sh --qcow2 from any
+# OCI archive). tenkei's initramfs dispatches on root= (see
 # initramfs/init).
 #
 # Default SSH port 2223 is intentionally different from test-boot.sh (2222)
@@ -89,7 +90,7 @@ done
 
 # ─── Prerequisites ────────────────────────────────────────────────
 
-[[ -f "$DISK" ]]   || error "disk not found: $DISK (build it: sudo bash rootfs/build-yggdrasil-disk.sh)"
+[[ -f "$DISK" ]]   || error "disk not found: $DISK (build it: bash rootfs/build-yggdrasil.sh)"
 [[ -f "$KERNEL" ]] || error "kernel not found: $KERNEL (build it: bash scripts/build-kernel.sh <ver>)"
 [[ -f "$INITRD" ]] || error "initramfs not found: $INITRD (build it: bash initramfs/build.sh)"
 

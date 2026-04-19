@@ -156,14 +156,14 @@ tenkei/
 +-- kernel/
 |   +-- Containerfile        # kernel-as-OCI image source
 +-- rootfs/
-|   +-- build-yggdrasil.sh        # Yggdrasil OCI + .tar.xz builder
-|   +-- build-yggdrasil-disk.sh   # Yggdrasil qcow2 builder
+|   +-- build-yggdrasil.sh        # Yggdrasil OCI + .tar.xz + qcow2 builder
 |   +-- seed-target.txt           # package keep-list
 |   +-- networkd/                 # staged systemd-networkd config
 |   +-- sshkey/                   # staged ssh-key sync service + script
 +-- scripts/
 |   +-- build-kernel.sh           # Kernel build wrapper (setup/build/install)
 |   +-- build-kernel-oci.sh       # Package kernel + initramfs as OCI image
+|   +-- extract-oci.sh            # Pure-shell rootfs extractor (dir/tar/qcow2)
 |   +-- test-boot.sh              # QEMU + virtiofsd boot test helper
 |   +-- test-yggdrasil-lxc.sh     # Yggdrasil LXC smoke test
 |   +-- test-yggdrasil-vm.sh      # Yggdrasil virtiofs VM smoke test

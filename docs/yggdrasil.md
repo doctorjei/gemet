@@ -241,6 +241,25 @@ same rootfs work directory in a single build invocation:
 | `.tar.xz`   | `build/yggdrasil-<ver>.tar.xz`            | `lxc-create -t local --rootfs=<tarball>` |
 | qcow2       | `build/yggdrasil-<ver>.qcow2`             | External boot via `qemu -kernel -initrd` |
 
+### Converting an existing OCI archive
+
+`scripts/extract-oci.sh` is a pure-shell utility (no podman/umoci/root)
+that reads an OCI image archive — e.g. the output of
+`podman save --format=oci-archive yggdrasil:<ver>` or any droste tier
+exported the same way — and re-emits it in any of the three forms:
+
+```bash
+scripts/extract-oci.sh --dir   image.oci.tar /tmp/rootfs
+scripts/extract-oci.sh --tar   image.oci.tar rootfs.tar
+scripts/extract-oci.sh --qcow2 image.oci.tar rootfs.qcow2
+```
+
+The `--qcow2` mode produces the same partition-less single-ext4 layout
+described in [qcow2 boot contract](#qcow2-boot-contract-disk-image-artifact)
+below, and uses the unprivileged `mkfs.ext4 -d` path. Use this when you
+already have an OCI tarball and want a disk image without re-running the
+full Yggdrasil build.
+
 ## Boot contracts
 
 ### virtiofs boot (OCI artifact, droste tiers)
