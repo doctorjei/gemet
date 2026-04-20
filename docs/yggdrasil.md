@@ -364,6 +364,15 @@ SSH-ready base for humans or ad-hoc testing, use `bifrost:<ver>`
 directly; if you need a different user model, build `FROM
 yggdrasil:<ver>` and roll your own. See [bifrost.md](bifrost.md).
 
+**Canopy** is the first-party no-init companion image — the inverse
+shape from Bifrost. Where Bifrost **adds** opinion (sshd, key sync),
+Canopy **removes** it: the init-family (systemd pid1, udev daemon,
+dbus daemon, init meta-packages and their cascade) is purged, leaving
+a base suitable for no-init process containers where the caller brings
+their own pid1 (tini, dumb-init) or runs as a bare process. It's built
+as a derived image from the same `yggdrasil-<ver>.tar.xz`. The
+motivating consumer is `droste-seed`. See [canopy.md](canopy.md).
+
 ## Testing
 
 Minimum-viable boot tests for a freshly-built `yggdrasil:<ver>`:

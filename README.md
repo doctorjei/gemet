@@ -49,10 +49,13 @@ images.
 | OCI      | `tenkei-kernel:<ver>`                 | kernel-as-OCI — see [docs/kernel-as-oci.md](docs/kernel-as-oci.md) |
 | OCI      | `yggdrasil:<ver>`                     | minimal Debian 13 + systemd userland (~210-230 MB) — see [docs/yggdrasil.md](docs/yggdrasil.md) |
 | OCI      | `bifrost:<ver>`                       | Yggdrasil + opinionated SSH layer — see [docs/bifrost.md](docs/bifrost.md) |
+| OCI      | `canopy:<ver>`                        | Yggdrasil minus init-family (no-init base) — see [docs/canopy.md](docs/canopy.md) |
 | Tarball  | `build/yggdrasil-<ver>.tar.xz`        | Yggdrasil rootfs for `lxc-create`       |
 | Tarball  | `build/bifrost-<ver>.tar.xz`          | Bifrost rootfs (SSH-ready)              |
+| Tarball  | `build/canopy-<ver>.tar.xz`           | Canopy rootfs (no-init)                 |
 | qcow2    | `build/yggdrasil-<ver>.qcow2`         | bootable disk image for `qemu -drive`   |
 | qcow2    | `build/bifrost-<ver>.qcow2`           | bootable disk image (SSH-ready)         |
+| qcow2    | `build/canopy-<ver>.qcow2`            | disk image (no-init; primarily for inspection) |
 
 As of 1.2.0, the Yggdrasil build applies a multi-phase shrink (BusyBox
 swap, targeted purges, doc/locale/man sweep, python library trim) that
@@ -61,14 +64,19 @@ reduces the rootfs from ~377 MB down to ~210-230 MB. Recovery scripts
 downstream tiers that need any dropped package or wiped doc tree back —
 see [docs/yggdrasil.md](docs/yggdrasil.md) for details.
 
-**Yggdrasil vs Bifrost:** Yggdrasil is the pure foundation — no SSH
-host keys, sshd disabled, no authorized_keys machinery. Each downstream
-consumer (droste tiers, kento fixtures) layers its own user and
-authorized-keys policy on top. **Bifrost** is a derived companion image
-for humans and ad-hoc testing: Yggdrasil plus an opinionated SSH layer
-(sshd enabled, host keys generated at first boot, and an
-`/etc/bifrost/authorized_keys` staging path for pre-boot key
-injection). See [docs/bifrost.md](docs/bifrost.md) for the full contract.
+**Yggdrasil vs Bifrost vs Canopy:** Yggdrasil is the pure foundation —
+full systemd + networkd, no SSH host keys, sshd disabled, no
+authorized_keys machinery. Each downstream consumer (droste tiers,
+kento fixtures) layers its own user and authorized-keys policy on top.
+**Bifrost** is the derived SSH-ready companion for humans and ad-hoc
+testing: Yggdrasil plus sshd enabled, host keys generated at first
+boot, and an `/etc/bifrost/authorized_keys` staging path for pre-boot
+key injection. **Canopy** is the inverse shape — Yggdrasil with the
+init-family removed (no systemd pid1, no udev daemon, no dbus daemon),
+intended as a base for no-init process containers where the caller
+brings their own pid1 (tini, dumb-init) or runs as a bare process. See
+[docs/bifrost.md](docs/bifrost.md) and [docs/canopy.md](docs/canopy.md)
+for the full contracts.
 
 ## Relationship to Kata Containers
 
@@ -170,6 +178,7 @@ tenkei/
 +-- rootfs/
 |   +-- build-yggdrasil.sh        # Yggdrasil OCI + .tar.xz + qcow2 builder
 |   +-- build-bifrost.sh          # Bifrost derived-image builder (yggdrasil + SSH layer)
+|   +-- build-canopy.sh           # Canopy derived-image builder (yggdrasil minus init-family)
 |   +-- seed-target.txt           # package keep-list
 |   +-- networkd/                 # staged systemd-networkd config
 |   +-- bifrost/                  # Bifrost overlay: units + authorized_keys sync script
@@ -192,6 +201,7 @@ tenkei/
 |   +-- kernel-as-oci.md          # kernel-as-OCI artifact reference
 |   +-- yggdrasil.md              # Yggdrasil artifact reference
 |   +-- bifrost.md                # Bifrost artifact reference (SSH-ready companion)
+|   +-- canopy.md                 # Canopy artifact reference (no-init companion)
 |   +-- pve-integration-spec.md   # PVE config requirements for kento
 +-- .github/workflows/
 |   +-- release.yml               # Tag-triggered build/test/publish pipeline

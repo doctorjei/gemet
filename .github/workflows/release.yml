@@ -302,6 +302,32 @@ jobs:
           podman image exists "localhost/yggdrasil:${VERSION}" \
             || { echo "ERROR: yggdrasil OCI image was not imported"; exit 1; }
 
+      - name: Build bifrost rootfs (tar.xz + qcow2 + OCI import)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Bifrost is a derived image (yggdrasil + opinionated SSH layer);
+          # runs in ~30 s since it just extracts the yggdrasil tar.xz,
+          # overlays a handful of files, and re-packages.
+          bash rootfs/build-bifrost.sh
+          VERSION="${{ steps.ver.outputs.version }}"
+          ls -l "build/bifrost-${VERSION}.tar.xz" "build/bifrost-${VERSION}.qcow2"
+          podman image exists "localhost/bifrost:${VERSION}" \
+            || { echo "ERROR: bifrost OCI image was not imported"; exit 1; }
+
+      - name: Build canopy rootfs (tar.xz + qcow2 + OCI import)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Canopy is a derived image (yggdrasil minus init-family); runs
+          # apt-get purge in a chroot over the yggdrasil rootfs, removes
+          # residual unit dirs, re-packages.
+          bash rootfs/build-canopy.sh
+          VERSION="${{ steps.ver.outputs.version }}"
+          ls -l "build/canopy-${VERSION}.tar.xz" "build/canopy-${VERSION}.qcow2"
+          podman image exists "localhost/canopy:${VERSION}" \
+            || { echo "ERROR: canopy OCI image was not imported"; exit 1; }
+
       - name: Build kernel-as-OCI image
         shell: bash
         run: |
@@ -320,18 +346,30 @@ jobs:
             -o "build/yggdrasil-${VERSION}-oci.tar" \
             "localhost/yggdrasil:${VERSION}"
           podman save --format=oci-archive \
+            -o "build/bifrost-${VERSION}-oci.tar" \
+            "localhost/bifrost:${VERSION}"
+          podman save --format=oci-archive \
+            -o "build/canopy-${VERSION}-oci.tar" \
+            "localhost/canopy:${VERSION}"
+          podman save --format=oci-archive \
             -o "build/tenkei-kernel-${VERSION}-oci.tar" \
             "localhost/tenkei-kernel:${VERSION}"
-          ls -l "build/yggdrasil-${VERSION}-oci.tar" "build/tenkei-kernel-${VERSION}-oci.tar"
+          ls -l \
+            "build/yggdrasil-${VERSION}-oci.tar" \
+            "build/bifrost-${VERSION}-oci.tar" \
+            "build/canopy-${VERSION}-oci.tar" \
+            "build/tenkei-kernel-${VERSION}-oci.tar"
 
       - name: Tier 1 — structural tests
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
+          # Single invocation covers all three variants via auto-detection
+          # on <variant>-<ver>.tar.xz existence.
           bash scripts/ci-structural-tests.sh --build-dir=build/ --version="$VERSION"
 
-      - name: Tier 2 — systemd-in-OCI tests
+      - name: Tier 2 — systemd-in-OCI tests (yggdrasil)
         shell: bash
         run: |
           set -euo pipefail
@@ -340,7 +378,36 @@ jobs:
             --oci-archive="build/yggdrasil-${VERSION}-oci.tar" \
             --version="$VERSION"
 
-      - name: Compute boot-path change (requires VM smoke test?)
+      - name: Tier 2 — systemd-in-OCI tests (bifrost)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          # Bifrost's Tier 2 is a cousin of ci-systemd-test.sh with the
+          # bifrost-specific contract added: ssh.service enabled, SSH
+          # host keys present after first boot (bifrost-hostkeys.service
+          # fires), bifrost-sshkey-sync.service is enabled but inactive
+          # (no /etc/bifrost/authorized_keys to read from in a vanilla
+          # build). See scripts/ci-bifrost-test.sh for the full contract.
+          bash scripts/ci-bifrost-test.sh \
+            --oci-archive="build/bifrost-${VERSION}-oci.tar" \
+            --version="$VERSION"
+
+      - name: Tier 2 — structural-runtime tests (canopy)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          # Canopy has no pid1 so `podman run --systemd=always` is
+          # meaningless. Instead, ci-canopy-test.sh runs a one-shot
+          # process-container check: apt-get --version + bash --version
+          # + dpkg package count in expected band. See the script header
+          # for the full rationale.
+          bash scripts/ci-canopy-test.sh \
+            --oci-archive="build/canopy-${VERSION}-oci.tar" \
+            --version="$VERSION"
+
+      - name: Compute boot-path change [requires VM smoke test] (on tagged version)
         id: bootcheck
         if: steps.ver.outputs.is_tag_push == 'true'
         shell: bash
@@ -373,7 +440,7 @@ jobs:
             echo "change_reason=$CHANGE_REASON"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Log in to GHCR
+      - name: Log in to GHCR (on tagged version)
         if: steps.ver.outputs.is_tag_push == 'true'
         shell: bash
         run: |
@@ -381,7 +448,7 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Tag and push OCI images to GHCR
+      - name: Tag and push OCI images to GHCR (on tagged version)
         if: steps.ver.outputs.is_tag_push == 'true'
         shell: bash
         run: |
@@ -395,6 +462,20 @@ jobs:
           podman push "ghcr.io/doctorjei/tenkei/yggdrasil:${VERSION}"
           podman push "ghcr.io/doctorjei/tenkei/yggdrasil:latest"
 
+          podman tag "localhost/bifrost:${VERSION}" \
+            "ghcr.io/doctorjei/tenkei/bifrost:${VERSION}"
+          podman tag "localhost/bifrost:${VERSION}" \
+            "ghcr.io/doctorjei/tenkei/bifrost:latest"
+          podman push "ghcr.io/doctorjei/tenkei/bifrost:${VERSION}"
+          podman push "ghcr.io/doctorjei/tenkei/bifrost:latest"
+
+          podman tag "localhost/canopy:${VERSION}" \
+            "ghcr.io/doctorjei/tenkei/canopy:${VERSION}"
+          podman tag "localhost/canopy:${VERSION}" \
+            "ghcr.io/doctorjei/tenkei/canopy:latest"
+          podman push "ghcr.io/doctorjei/tenkei/canopy:${VERSION}"
+          podman push "ghcr.io/doctorjei/tenkei/canopy:latest"
+
           podman tag "localhost/tenkei-kernel:${VERSION}" \
             "ghcr.io/doctorjei/tenkei/tenkei-kernel:${VERSION}"
           podman tag "localhost/tenkei-kernel:${VERSION}" \
@@ -402,7 +483,7 @@ jobs:
           podman push "ghcr.io/doctorjei/tenkei/tenkei-kernel:${VERSION}"
           podman push "ghcr.io/doctorjei/tenkei/tenkei-kernel:latest"
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (on tagged version)
         if: steps.ver.outputs.is_tag_push == 'true'
         shell: bash
         env:
@@ -421,6 +502,12 @@ jobs:
             "build/yggdrasil-${VERSION}.tar.xz"
             "build/yggdrasil-${VERSION}.qcow2"
             "build/yggdrasil-${VERSION}-oci.tar"
+            "build/bifrost-${VERSION}.tar.xz"
+            "build/bifrost-${VERSION}.qcow2"
+            "build/bifrost-${VERSION}-oci.tar"
+            "build/canopy-${VERSION}.tar.xz"
+            "build/canopy-${VERSION}.qcow2"
+            "build/canopy-${VERSION}-oci.tar"
             "build/tenkei-kernel-${VERSION}-oci.tar"
           )
           for a in "${ASSETS[@]}"; do
@@ -489,4 +576,10 @@ jobs:
             "build/yggdrasil-${VERSION}.tar.xz" \
             "build/yggdrasil-${VERSION}.qcow2" \
             "build/yggdrasil-${VERSION}-oci.tar" \
+            "build/bifrost-${VERSION}.tar.xz" \
+            "build/bifrost-${VERSION}.qcow2" \
+            "build/bifrost-${VERSION}-oci.tar" \
+            "build/canopy-${VERSION}.tar.xz" \
+            "build/canopy-${VERSION}.qcow2" \
+            "build/canopy-${VERSION}-oci.tar" \
             "build/tenkei-kernel-${VERSION}-oci.tar"
