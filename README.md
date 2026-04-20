@@ -48,8 +48,11 @@ images.
 | Raw      | `build/tenkei-initramfs.img`          | initramfs (~1.1 MB)                     |
 | OCI      | `tenkei-kernel:<ver>`                 | kernel-as-OCI — see [docs/kernel-as-oci.md](docs/kernel-as-oci.md) |
 | OCI      | `yggdrasil:<ver>`                     | minimal Debian 13 + systemd userland (~210-230 MB) — see [docs/yggdrasil.md](docs/yggdrasil.md) |
+| OCI      | `bifrost:<ver>`                       | Yggdrasil + opinionated SSH layer — see [docs/bifrost.md](docs/bifrost.md) |
 | Tarball  | `build/yggdrasil-<ver>.tar.xz`        | Yggdrasil rootfs for `lxc-create`       |
+| Tarball  | `build/bifrost-<ver>.tar.xz`          | Bifrost rootfs (SSH-ready)              |
 | qcow2    | `build/yggdrasil-<ver>.qcow2`         | bootable disk image for `qemu -drive`   |
+| qcow2    | `build/bifrost-<ver>.qcow2`           | bootable disk image (SSH-ready)         |
 
 As of 1.2.0, the Yggdrasil build applies a multi-phase shrink (BusyBox
 swap, targeted purges, doc/locale/man sweep, python library trim) that
@@ -57,6 +60,15 @@ reduces the rootfs from ~377 MB down to ~210-230 MB. Recovery scripts
 (`yggdrasil-unshim`, `yggdrasil-rehydrate`) ship inside the image for
 downstream tiers that need any dropped package or wiped doc tree back —
 see [docs/yggdrasil.md](docs/yggdrasil.md) for details.
+
+**Yggdrasil vs Bifrost:** Yggdrasil is the pure foundation — no SSH
+host keys, sshd disabled, no authorized_keys machinery. Each downstream
+consumer (droste tiers, kento fixtures) layers its own user and
+authorized-keys policy on top. **Bifrost** is a derived companion image
+for humans and ad-hoc testing: Yggdrasil plus an opinionated SSH layer
+(sshd enabled, host keys generated at first boot, and an
+`/etc/bifrost/authorized_keys` staging path for pre-boot key
+injection). See [docs/bifrost.md](docs/bifrost.md) for the full contract.
 
 ## Relationship to Kata Containers
 
@@ -157,8 +169,10 @@ tenkei/
 |   +-- Containerfile        # kernel-as-OCI image source
 +-- rootfs/
 |   +-- build-yggdrasil.sh        # Yggdrasil OCI + .tar.xz + qcow2 builder
+|   +-- build-bifrost.sh          # Bifrost derived-image builder (yggdrasil + SSH layer)
 |   +-- seed-target.txt           # package keep-list
 |   +-- networkd/                 # staged systemd-networkd config
+|   +-- bifrost/                  # Bifrost overlay: units + authorized_keys sync script
 +-- scripts/
 |   +-- build-kernel.sh           # Kernel build wrapper (setup/build/install)
 |   +-- build-kernel-oci.sh       # Package kernel + initramfs as OCI image
@@ -177,6 +191,7 @@ tenkei/
 |   +-- releases.md               # Release artifact inventory + CI process
 |   +-- kernel-as-oci.md          # kernel-as-OCI artifact reference
 |   +-- yggdrasil.md              # Yggdrasil artifact reference
+|   +-- bifrost.md                # Bifrost artifact reference (SSH-ready companion)
 |   +-- pve-integration-spec.md   # PVE config requirements for kento
 +-- .github/workflows/
 |   +-- release.yml               # Tag-triggered build/test/publish pipeline

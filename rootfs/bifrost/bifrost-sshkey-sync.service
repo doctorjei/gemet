@@ -1,0 +1,16 @@
+# Bifrost SSH authorized_keys sync — runs once per boot, merges any lines
+# from /etc/bifrost/authorized_keys into /root/.ssh/authorized_keys
+# (non-destructive; see docs/bifrost.md for the full contract).
+[Unit]
+Description=Bifrost SSH authorized_keys sync
+ConditionPathExists=/etc/bifrost/authorized_keys
+Before=ssh.service ssh.socket
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/bifrost-sync-sshkeys.sh
+
+[Install]
+WantedBy=multi-user.target

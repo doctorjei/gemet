@@ -354,6 +354,16 @@ fully rehydrate the image, use `yggdrasil-unshim` or
 `yggdrasil-rehydrate` (see [Recovery tooling](#recovery-tooling)) from
 a `RUN` step in the tier's Containerfile.
 
+### Downstream images in tenkei
+
+**Bifrost** is the first-party SSH-ready companion image: Yggdrasil plus
+an opinionated SSH layer (sshd enabled, host keys generated at first
+boot, `/etc/bifrost/authorized_keys` sync). It's built as a derived
+image from an existing `yggdrasil-<ver>.tar.xz`. If you want an
+SSH-ready base for humans or ad-hoc testing, use `bifrost:<ver>`
+directly; if you need a different user model, build `FROM
+yggdrasil:<ver>` and roll your own. See [bifrost.md](bifrost.md).
+
 ## Testing
 
 Minimum-viable boot tests for a freshly-built `yggdrasil:<ver>`:
