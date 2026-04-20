@@ -250,6 +250,7 @@ ALLOWLIST=(
     systemd-remount-fs.service      # container rootfs not mounted the expected way
     serial-getty@ttyS0.service      # no serial device
     getty@tty1.service              # no tty
+    systemd-resolved.service        # User=systemd-resolve setuid fails in rootless-podman userns (217/USER); runs fine in a real VM
 )
 
 FAILED_RAW=$(podman exec "$CONTAINER_NAME" \
