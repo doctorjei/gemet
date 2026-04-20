@@ -113,7 +113,7 @@ FAILED=0
 RUN_TAG="$$-$(date +%s)"
 CONTAINER_NAME="ci-yggdrasil-${RUN_TAG}"
 IMAGE=""
-IMAGE_LOADED=0     # 1 after a successful podman load — gates cleanup rmi
+IMAGE_ADDED=0      # 1 if podman load added a new image — gates cleanup rmi
 CID=""             # container ID once started
 CONTAINER_STARTED=0
 
@@ -124,7 +124,7 @@ cleanup() {
         # --rm on the original run should auto-remove, but be defensive.
         podman rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
     fi
-    if (( IMAGE_LOADED == 1 )) && [[ -n "$IMAGE" ]]; then
+    if (( IMAGE_ADDED == 1 )) && [[ -n "$IMAGE" ]]; then
         podman rmi -f "$IMAGE" >/dev/null 2>&1 || true
     fi
 }
@@ -174,9 +174,9 @@ else
     else
         if echo "$PRE_LOAD_IMAGES" | grep -Fxq "$IMAGE"; then
             info "image $IMAGE pre-existed in the store; cleanup will leave it intact"
-            IMAGE_LOADED=0
+            IMAGE_ADDED=0
         else
-            IMAGE_LOADED=1
+            IMAGE_ADDED=1
         fi
         pass "loaded image: $IMAGE"
     fi
@@ -184,7 +184,9 @@ fi
 echo ""
 
 # If load failed outright, the remaining checks can't run. Report and exit.
-if [[ -z "$IMAGE" ]] || (( IMAGE_LOADED == 0 )); then
+# $IMAGE is the load-succeeded signal (set only when parse succeeded);
+# $IMAGE_ADDED is purely about cleanup ownership and is unrelated here.
+if [[ -z "$IMAGE" ]]; then
     echo "─────────────────────────────────────────────"
     echo -e "\033[1;31m${PASSED} passed, ${FAILED} failed\033[0m (aborted after image load)"
     exit 1
