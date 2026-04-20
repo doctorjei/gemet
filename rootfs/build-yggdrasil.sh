@@ -91,7 +91,7 @@ PURGE_PACKAGES=(
 
 YGGDRASIL_STRIP_PACKAGES=(
     cloud-init cloud-guest-utils cloud-image-utils cloud-utils polkitd
-    libpolkit-agent-1-0 libpolkit-gobject-1-0 systemd-resolved
+    libpolkit-agent-1-0 libpolkit-gobject-1-0
     systemd-timesyncd unattended-upgrades dmsetup apparmor screen qemu-utils
     dosfstools gdisk genisoimage dhcpcd-base reportbug python3-reportbug
     python3-debianbts apt-listchanges ssh-import-id bind9-host bind9-libs
@@ -603,6 +603,7 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 systemctl enable systemd-networkd.service
+systemctl enable systemd-resolved.service
 
 # Yggdrasil is a pure base: it ships no SSH host keys (no cloud-init to
 # generate them). Disable sshd by default so the unit doesn't fail on
@@ -632,6 +633,12 @@ rm -rf "\$WORK_DIR/boot/"* 2>/dev/null || true
 rm -rf "\$WORK_DIR/lib/modules/"* 2>/dev/null || true
 
 printf '# Empty — no block devices in OCI base\n' > "\$WORK_DIR/etc/fstab"
+
+# Point /etc/resolv.conf at systemd-resolved's runtime stub. The target
+# materializes when resolved starts on boot; -sfn replaces both the
+# Debian default symlink and any leaked build-host resolv.conf copy.
+ln -sfn /run/systemd/resolve/stub-resolv.conf "\$WORK_DIR/etc/resolv.conf"
+rm -f "\$WORK_DIR/etc/.resolv.conf.systemd-resolved.bak"
 
 # ── Phase 3: file-level sweep trims ─────────────────────────────────
 if \$DO_SHRINK; then

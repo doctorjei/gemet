@@ -211,6 +211,7 @@ filter_installed() {
 # against apt being reticent about autoremove of "important" packages).
 cat > /tmp/canopy-purge-candidates.txt <<'PURGELIST'
 systemd
+systemd-resolved
 systemd-sysv
 udev
 dbus
@@ -348,6 +349,10 @@ rm -rf "\$WORK_DIR/etc/rc0.d" "\$WORK_DIR/etc/rc1.d" "\$WORK_DIR/etc/rc2.d" \
 rm -rf "\$WORK_DIR/usr/lib/systemd"
 # Dangling init symlinks (owned by purged systemd-sysv / init packages).
 rm -f "\$WORK_DIR/sbin/init" "\$WORK_DIR/usr/sbin/init"
+# Drop the inherited resolv.conf symlink (target never materializes
+# without pid1) and any systemd-resolved postinst .bak residue.
+# Canopy ships without /etc/resolv.conf — consumers provide DNS.
+rm -f "\$WORK_DIR/etc/resolv.conf" "\$WORK_DIR/etc/.resolv.conf.systemd-resolved.bak"
 
 FINAL_SIZE=\$(du -sh "\$WORK_DIR" 2>/dev/null | awk '{print \$1}')
 info "Final rootfs size: \$FINAL_SIZE"

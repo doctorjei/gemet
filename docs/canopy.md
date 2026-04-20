@@ -24,6 +24,7 @@ without pid1, but harmless).
 Removed outright:
 
 - `systemd`, `systemd-sysv` — pid1 and SysV-init compatibility wrapper
+- `systemd-resolved` — DNS resolver daemon (nothing to run under without pid1)
 - `udev` — device-event daemon
 - `dbus`, `dbus-bin`, `dbus-daemon`, `dbus-system-bus-common`,
   `dbus-session-bus-common` — dbus daemon + bus config
@@ -106,7 +107,15 @@ residual directories that dpkg leaves behind:
 /etc/rc?.d/                — 22 rc*.d symlinks from purged pkgs
 /usr/lib/systemd/          — unit files (see caveat below)
 /sbin/init                 — dangling symlink if present
+/etc/resolv.conf           — symlink inherited from Yggdrasil;
+                             target never materializes without pid1
 ```
+
+Canopy ships **without** `/etc/resolv.conf`. The inherited Yggdrasil
+symlink points at `systemd-resolved`'s runtime stub, which never
+materializes in a no-init container. Consumers that add a pid1 (or
+need DNS directly) are responsible for providing their own
+`/etc/resolv.conf`.
 
 The `/usr/lib/systemd/` wipe is slightly irreversible: a few unit files
 there are owned by packages that **stay** installed (`apt`,

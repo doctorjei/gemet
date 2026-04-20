@@ -15,8 +15,9 @@ shadows or fully rehydrate when needed.
 
 A stripped-down Debian 13 genericcloud rootfs with:
 
-- systemd as PID 1 (udev, dbus kept; polkitd and resolved/timesyncd dropped)
+- systemd as PID 1 (udev, dbus kept; polkitd and timesyncd dropped)
 - systemd-networkd configured for DHCP on all ethernet interfaces
+- systemd-resolved enabled; `/etc/resolv.conf` → `/run/systemd/resolve/stub-resolv.conf`
 - openssh-server installed but **disabled by default** (no host keys
   ship — see "SSH host keys" below)
 - busybox providing shim coverage for 18 swapped-out packages
@@ -127,8 +128,9 @@ authoritative package lists):
 
 - `cloud-init`, `cloud-guest-utils`, `cloud-image-utils`, `cloud-utils`
 - `polkitd`, `libpolkit-agent-1-0`, `libpolkit-gobject-1-0`
-- `systemd-resolved` (DNS via libc + `/etc/resolv.conf`),
-  `systemd-timesyncd`
+- `systemd-timesyncd` (DNS is handled by `systemd-resolved`, which is
+  kept and enabled; `/etc/resolv.conf` is a symlink to the resolved
+  stub at `/run/systemd/resolve/stub-resolv.conf`)
 - `unattended-upgrades`, `dmsetup`, `apparmor`
 - `screen`, `qemu-utils`, `dosfstools`, `gdisk`, `genisoimage`
 - `dhcpcd-base` (redundant with networkd)
