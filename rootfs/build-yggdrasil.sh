@@ -57,8 +57,6 @@ BUILD_DIR="$REPO_ROOT/build"
 DOWNLOAD_DIR="$BUILD_DIR/download"
 SEED_TARGET="$REPO_ROOT/rootfs/seed-target.txt"
 NETWORKD_CONF="$REPO_ROOT/rootfs/networkd/80-dhcp.network"
-SSHKEY_UNIT="$REPO_ROOT/rootfs/sshkey/yggdrasil-sshkey-sync.service"
-SSHKEY_SCRIPT="$REPO_ROOT/rootfs/sshkey/sync-sshkeys.sh"
 UNSHIM_SCRIPT="$REPO_ROOT/rootfs/yggdrasil-unshim.sh"
 REHYDRATE_SCRIPT="$REPO_ROOT/rootfs/yggdrasil-rehydrate.sh"
 VERSION_FILE="$REPO_ROOT/VERSION"
@@ -284,13 +282,6 @@ printf '%s\n' "${PHASE4_PURGE_PACKAGES[@]}"    > "$SCRATCH/phase4-purge-list.txt
 grep -v '^#' "$SEED_TARGET" | grep -v '^$'     > "$SCRATCH/seed-keep.txt"
 cp "$NETWORKD_CONF"                              "$SCRATCH/80-dhcp.network"
 
-SSHKEY_STAGED=false
-if [[ -f "$SSHKEY_UNIT" ]] && [[ -f "$SSHKEY_SCRIPT" ]]; then
-    cp "$SSHKEY_UNIT"   "$SCRATCH/yggdrasil-sshkey-sync.service"
-    cp "$SSHKEY_SCRIPT" "$SCRATCH/sync-sshkeys.sh"
-    SSHKEY_STAGED=true
-fi
-
 RECOVERY_STAGED=false
 if [[ -f "$UNSHIM_SCRIPT" ]] && [[ -f "$REHYDRATE_SCRIPT" ]]; then
     cp "$UNSHIM_SCRIPT"    "$SCRATCH/yggdrasil-unshim.sh"
@@ -319,7 +310,6 @@ DO_SHRINK=$DO_SHRINK
 DO_TXZ=$DO_TXZ
 DO_QCOW2=$DO_QCOW2
 DO_IMPORT=$DO_IMPORT
-SSHKEY_STAGED=$SSHKEY_STAGED
 RECOVERY_STAGED=$RECOVERY_STAGED
 
 info()  { echo -e "\033[1;34m>>>\033[0m \$*"; }
@@ -585,22 +575,10 @@ chmod +x "\$WORK_DIR/tmp/strip.sh"
 info "Running package strip in chroot..."
 chroot "\$WORK_DIR" /tmp/strip.sh
 
-# ── Stage networkd, sshkey, recovery tooling ────────────────────────
+# ── Stage networkd + recovery tooling ───────────────────────────────
 info "Staging networkd DHCP config..."
 install -D -m 0644 "\$SCRATCH/80-dhcp.network" \
     "\$WORK_DIR/etc/systemd/network/80-dhcp.network"
-
-if \$SSHKEY_STAGED; then
-    info "Staging SSH key sync service + script..."
-    install -D -m 0644 "\$SCRATCH/yggdrasil-sshkey-sync.service" \
-        "\$WORK_DIR/etc/systemd/system/yggdrasil-sshkey-sync.service"
-    install -D -m 0755 "\$SCRATCH/sync-sshkeys.sh" \
-        "\$WORK_DIR/usr/local/sbin/sync-sshkeys.sh"
-else
-    warn "SSH key sync files missing — skipping unit enable."
-fi
-
-install -d -m 0755 "\$WORK_DIR/etc/yggdrasil"
 
 if \$RECOVERY_STAGED; then
     info "Staging recovery scripts..."
@@ -632,17 +610,12 @@ systemctl enable systemd-networkd.service
 # 'systemctl enable ssh'. See docs/yggdrasil.md.
 systemctl disable ssh.service ssh.socket 2>/dev/null || true
 
-if [[ "\${SSHKEY_STAGED_INNER}" == "true" ]]; then
-    systemctl enable yggdrasil-sshkey-sync.service
-fi
-
 # Locale generation and locales-package purge happen INSIDE strip.sh
 # (before Phase 1) because locales postinst needs real coreutils ln -r.
 :
 SETUP_EOF
 
-sed -i "s/\\\${DO_SHRINK_INNER}/\$DO_SHRINK/g"       "\$WORK_DIR/tmp/setup.sh"
-sed -i "s/\\\${SSHKEY_STAGED_INNER}/\$SSHKEY_STAGED/g" "\$WORK_DIR/tmp/setup.sh"
+sed -i "s/\\\${DO_SHRINK_INNER}/\$DO_SHRINK/g" "\$WORK_DIR/tmp/setup.sh"
 chmod +x "\$WORK_DIR/tmp/setup.sh"
 
 info "Running per-image setup (locales, unit enables)..."

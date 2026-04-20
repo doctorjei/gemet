@@ -18,8 +18,7 @@ A stripped-down Debian 13 genericcloud rootfs with:
 - systemd as PID 1 (udev, dbus kept; polkitd and resolved/timesyncd dropped)
 - systemd-networkd configured for DHCP on all ethernet interfaces
 - openssh-server installed but **disabled by default** (no host keys
-  ship — see "SSH host keys" below); idempotent `authorized_keys` sync
-  via `/etc/yggdrasil/authorized_keys` still runs at every boot
+  ship — see "SSH host keys" below)
 - busybox providing shim coverage for 18 swapped-out packages
   (hostname, gzip, sed, grep, findutils, iproute2, etc.)
 - nano, vim-tiny, curl, tcpdump, iptables kept for "poke around" ergonomics
@@ -306,30 +305,6 @@ qemu-system-x86_64 \
 
 `scripts/test-yggdrasil-disk.sh` wraps this with sensible defaults.
 
-## SSH key sync contract
-
-Orchestrators (kento, droste, humans) write authorized-keys lines to
-`/etc/yggdrasil/authorized_keys` in the rootfs before starting the
-container/VM. On each boot, `yggdrasil-sshkey-sync.service` runs
-`/usr/local/sbin/sync-sshkeys.sh`, which appends any new lines to
-`/root/.ssh/authorized_keys` (non-destructive — existing keys are
-preserved).
-
-- **Idempotent** — safe to run on every boot; duplicate lines are
-  skipped via exact-line `grep -Fx` check.
-- **Non-destructive** — keys are never removed or rewritten. Stale keys
-  must be cleaned up manually; editing `/etc/yggdrasil/authorized_keys`
-  and rebooting only adds, never subtracts.
-- **No-op when absent** — the systemd unit has
-  `ConditionPathExists=/etc/yggdrasil/authorized_keys`; if the file
-  doesn't exist the service exits cleanly without touching anything.
-- **Runs before ssh** — unit is ordered `Before=ssh.service sshd.service`
-  so keys are in place before the SSH daemon starts accepting
-  connections.
-
-Comments (lines starting with `#`) and blank lines in the source file
-are ignored.
-
 ## SSH host keys
 
 Yggdrasil ships **no** `/etc/ssh/ssh_host_*_key` files and **ssh.service
@@ -347,12 +322,6 @@ Containerfile (or equivalent):
    time (`ssh-keygen -A -f /etc/ssh`), inject pre-generated keys, or
    ship a oneshot unit that runs `ssh-keygen -A` on first boot.
 2. Re-enable the service: `systemctl enable ssh.service ssh.socket`.
-
-The `authorized_keys` sync contract above is independent of this — it
-runs regardless of whether sshd is enabled, so keys staged in
-`/etc/yggdrasil/authorized_keys` land in `/root/.ssh/authorized_keys`
-even on a base Yggdrasil boot (ready for the moment a downstream tier
-turns sshd on).
 
 ## Downstream consumption
 
@@ -377,9 +346,8 @@ pulls the kernel/initramfs from `tenkei-kernel:<ver>` via
 `COPY --from=`.
 
 Downstream customizations are unrestricted — add packages, write config,
-create users, disable services. Yggdrasil's only expectation is that the
-ssh-key sync contract (`/etc/yggdrasil/authorized_keys`) remain intact
-if you want orchestrator-injected keys to keep working.
+create users, disable services. Each downstream image owns its own user
+and authorized-keys policy; Yggdrasil ships neither.
 
 If a downstream tier needs to reinstall a BusyBox-shimmed package or
 fully rehydrate the image, use `yggdrasil-unshim` or
@@ -398,8 +366,7 @@ bash     scripts/test-yggdrasil-disk.sh
 
 The LXC test boots Yggdrasil as a system container and runs a few probes
 via `lxc-attach` (`systemctl is-system-running`, `/etc/os-release`,
-`/etc/yggdrasil` existence). Pass `--keep` to leave the container in
-place for post-mortem.
+`id root`). Pass `--keep` to leave the container in place for post-mortem.
 
 The VM test extracts the OCI rootfs to a temp dir, ensures
 `serial-getty@ttyS0.service` is enabled (genericcloud historically skips

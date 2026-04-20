@@ -159,7 +159,6 @@ tenkei/
 |   +-- build-yggdrasil.sh        # Yggdrasil OCI + .tar.xz + qcow2 builder
 |   +-- seed-target.txt           # package keep-list
 |   +-- networkd/                 # staged systemd-networkd config
-|   +-- sshkey/                   # staged ssh-key sync service + script
 +-- scripts/
 |   +-- build-kernel.sh           # Kernel build wrapper (setup/build/install)
 |   +-- build-kernel-oci.sh       # Package kernel + initramfs as OCI image

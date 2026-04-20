@@ -36,7 +36,7 @@ Usage: test-yggdrasil-lxc.sh [options]
 
 Boots a yggdrasil:<ver> OCI image as an LXC system container and runs a
 short suite of probes (systemctl is-system-running, /etc/os-release,
-/etc/yggdrasil existence, etc.) via lxc-attach.
+id root) via lxc-attach.
 
 Options:
   --image <tag>       OCI image tag to test (default: yggdrasil:<VERSION>)
@@ -187,11 +187,6 @@ info "--- /etc/os-release ---"
 lxc-attach -n "$NAME" -- cat /etc/os-release || { PASS=false; warn "  FAIL: could not read /etc/os-release"; }
 
 probe "id root"              id root
-probe "ls /etc/yggdrasil"    ls -ld /etc/yggdrasil
-
-info "--- systemctl status yggdrasil-sshkey-sync.service (informational) ---"
-lxc-attach -n "$NAME" -- systemctl --no-pager status yggdrasil-sshkey-sync.service \
-    || info "  (inactive/condition-failed is expected with no /etc/yggdrasil/authorized_keys)"
 
 # ─── Summary ──────────────────────────────────────────────────────
 
