@@ -6,9 +6,11 @@ name: release
 #   - push of a tag matching "v*"          -> real release (artifacts + GHCR push + GitHub Release)
 #   - workflow_dispatch (manual)           -> build + test only (no GHCR push, no Release)
 #
-# Cold runs take ~25-30 min (kernel compile dominates); subsequent runs hit
-# the actions/cache entry keyed on kernel version + upstream/kernel subtree
-# hash and should complete in a few minutes.
+# Kernel acquisition: tries Kata's prebuilt kernel first (fast path,
+# ~seconds once the release is cached). Falls back to local compile
+# via scripts/build-kernel.sh if any fetch step fails (upstream 404,
+# regex miss, corrupt asset, etc.). Cold-cache fetch is ~30 s; cold
+# compile fallback is ~8-10 min with actions/cache warming later runs.
 #
 # Releases that touch kernel/initramfs code paths are created as DRAFTS
 # with a pre-publish checklist; a human must run yggdrasil-smoke-test.sh
@@ -26,6 +28,10 @@ on:
         description: 'Kata Containers release tag to fetch kernel from (blank = latest)'
         required: false
         default: ''
+      kernel_version:
+        description: 'Kernel version for the local-compile fallback path (used only if the Kata prebuilt fetch fails)'
+        required: false
+        default: '6.18.15'
 
 permissions:
   contents: write   # create GitHub Releases
@@ -38,6 +44,9 @@ jobs:
     env:
       # Overridable via workflow_dispatch input; empty means "use latest".
       KATA_RELEASE_INPUT: ${{ github.event.inputs.kata_release }}
+      # Fallback-only: kernel version used by scripts/build-kernel.sh if the
+      # Kata prebuilt fetch fails (upstream 404, regex miss, corrupt asset).
+      KERNEL_VERSION: ${{ github.event.inputs.kernel_version || '6.18.15' }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
@@ -121,14 +130,19 @@ jobs:
           # relax it for the life of this runner (ephemeral).
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      # ────────────────────────────────────────────────────────────────
+      # Kernel acquisition: try Kata prebuilt fetch first (fast path,
+      # ~seconds on cache hit), fall back to local compile (~8-10 min)
+      # if any fetch step fails. Tenkei doesn't patch the kernel
+      # (commit b10a21d), so the two paths are semantically equivalent.
+      # ────────────────────────────────────────────────────────────────
+
       - name: Resolve Kata release tag and asset URL
         id: kata
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          # Tenkei doesn't patch or specialize the kernel (commit b10a21d).
-          # We fetch Kata's prebuilt `vmlinuz.container` out of their
-          # release tarball instead of compiling locally.
           if [[ -n "${KATA_RELEASE_INPUT}" ]]; then
             API="https://api.github.com/repos/kata-containers/kata-containers/releases/tags/${KATA_RELEASE_INPUT}"
           else
@@ -162,6 +176,7 @@ jobs:
 
       - name: Restore cached Kata kernel
         id: kernel-cache
+        if: steps.kata.outcome == 'success'
         uses: actions/cache@v4
         with:
           # Cache just build/vmlinuz (~8 MB) — no need to cache the
@@ -173,7 +188,9 @@ jobs:
           key: kata-kernel-${{ steps.kata.outputs.tag }}
 
       - name: Download Kata kernel (cache miss)
-        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        id: kata-download
+        if: steps.kata.outcome == 'success' && steps.kernel-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -200,17 +217,80 @@ jobs:
             build/vmlinuz
           rm -rf "$ARCHIVE" "$EXTRACT"
 
-      - name: Verify kernel and build initramfs
+      - name: Check Kata kernel artifact
+        id: kata-check
+        shell: bash
+        run: |
+          set -uo pipefail
+          KATA_OK=false
+          if [[ -s build/vmlinuz ]] \
+             && file build/vmlinuz | grep -q 'Linux kernel'; then
+            KATA_OK=true
+            echo "Kata prebuilt kernel is usable."
+            ls -l build/vmlinuz
+          else
+            echo "Kata prebuilt kernel missing or invalid — will fall back to local compile."
+            rm -f build/vmlinuz
+          fi
+          echo "kata_ok=$KATA_OK" >> "$GITHUB_OUTPUT"
+
+      # ── Compile fallback — only runs if Kata fetch failed ──────────
+
+      - name: Install kernel compile dependencies (fallback)
+        if: steps.kata-check.outputs.kata_ok != 'true'
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get install -y --no-install-recommends \
+            build-essential flex bison bc libelf-dev libssl-dev
+
+      - name: Restore kernel source cache (fallback)
+        if: steps.kata-check.outputs.kata_ok != 'true'
+        uses: actions/cache@v4
+        with:
+          # build-kernel.sh places source at $PWD/kata-linux-<ver>-<config>.
+          # The "<config>" tail is read from upstream/kernel/kata_config_version
+          # and can change across upstream bumps — glob it.
+          path: |
+            kata-linux-${{ env.KERNEL_VERSION }}-*
+            ~/.ccache
+          key: kernel-${{ env.KERNEL_VERSION }}-${{ hashFiles('upstream/kernel/**') }}
+          restore-keys: |
+            kernel-${{ env.KERNEL_VERSION }}-
+
+      - name: Compile kernel locally (fallback)
+        if: steps.kata-check.outputs.kata_ok != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Kata prebuilt fetch failed; compiling kernel $KERNEL_VERSION locally."
+          echo "(cold cache ~8-10 min on GH runner; warm cache ~seconds)"
+          bash scripts/build-kernel.sh "$KERNEL_VERSION"
           ls -l build/vmlinuz
-          file build/vmlinuz | grep -q 'Linux kernel' \
-            || { echo "ERROR: build/vmlinuz is not a Linux kernel image"; exit 1; }
-          # Initramfs is tenkei-specific (busybox + virtiofs-aware init).
-          # Build it locally — it's 1 MB and takes a couple seconds.
+
+      # ── Always-run: build initramfs + final kernel sanity check ────
+
+      - name: Build initramfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Idempotent: rebuilds from initramfs/ source each time.
+          # Fetch path: produces the initramfs (wasn't built before).
+          # Compile path: overwrites what build-kernel.sh's install
+          # phase staged, but the content is identical (build.sh is
+          # the source of truth for both).
           bash initramfs/build.sh build/tenkei-initramfs.img
           ls -l build/tenkei-initramfs.img
+
+      - name: Verify final kernel + initramfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          file build/vmlinuz | grep -q 'Linux kernel' \
+            || { echo "ERROR: build/vmlinuz is not a Linux kernel image"; exit 1; }
+          [[ -s build/tenkei-initramfs.img ]] \
+            || { echo "ERROR: build/tenkei-initramfs.img missing or empty"; exit 1; }
+          echo "Kernel acquisition path: ${{ steps.kata-check.outputs.kata_ok == 'true' && 'Kata prebuilt fetch' || 'local compile fallback' }}"
 
       - name: Build yggdrasil rootfs (tar.xz + qcow2 + OCI import)
         shell: bash
