@@ -183,6 +183,76 @@ CMD ["/bin/bash"]
 This is the intended shape for droste downstream consumption: `FROM
 canopy + droste user + sysctl config`, nothing more.
 
+## Rehydrating GNU tools
+
+Canopy inherits Yggdrasil's busybox-shim machinery: `/usr/bin/ln`,
+`/usr/bin/cp`, `/usr/bin/grep`, and ~110 other canonical tool paths
+are symlinks to `/usr/bin/busybox`, with `dpkg-divert` rules
+redirecting each package's real binary to a `.distrib` suffix. This
+works fine for most Canopy use cases, but `apt install <anything>`
+downstream hits a subtle trap.
+
+### Why `apt install coreutils` looks correct but isn't
+
+When you `apt install coreutils` on top of Canopy, GNU `ln` lands at
+`/usr/bin/ln.distrib`, not `/usr/bin/ln` — the busybox symlink keeps
+owning the canonical path. dpkg reports `Setting up coreutils ... ok`,
+but the next package's postinst dies on `invalid option -- 'r'` when
+it calls `ln -rsf`, `cp -Z`, `chmod --reference`, `mv -Z`, or
+`grep --count`. The error surfaces in the wrong package and the cause
+is invisible from package-list inspection.
+
+The full set of diversion points is enumerated in
+`/usr/share/yggdrasil/busybox-shim.manifest` (inherited from
+Yggdrasil; 110 entries as of canopy:1.4.0).
+
+### Removing diversions to land real binaries at canonical paths
+
+Strip the manifest-listed diversions, then install the GNU tools. Both
+must happen in their own RUN layer **before** any other package
+install — dpkg ordering inside a single transaction does not
+guarantee coreutils configures first.
+
+```dockerfile
+FROM ghcr.io/doctorjei/tenkei/canopy:1.4.0
+
+# 1. Strip every busybox-shadow diversion. Leaves non-busybox diversions
+#    (e.g., .usr-is-merged compat) untouched.
+RUN awk '{print $2}' /usr/share/yggdrasil/busybox-shim.manifest \
+    | xargs -rn1 dpkg-divert --no-rename --remove
+
+# 2. Install the GNU replacements before any other apt transaction.
+#    Order matters: anything whose postinst calls GNU long-options on
+#    these tools must run after this layer, not in the same
+#    transaction.
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends \
+       coreutils grep sed findutils gzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. Now install whatever else you need. Postinsts will see real GNU
+#    tools.
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends \
+       <your packages here> \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+`--no-rename` on `dpkg-divert --remove` suppresses warnings about the
+future default flip and avoids touching files — the symlinks at
+canonical paths are what matter, not the `.distrib` files themselves,
+which become unreferenced once the diversion is gone.
+
+### Which tools to rehydrate
+
+Minimum for most postinsts: `coreutils`. Add `grep`, `sed`,
+`findutils`, `gzip` if any installed package's maintainer scripts use
+GNU long-options on those — empirically common in Debian. The
+droste reference consumer installs all five preemptively as a safety
+net; cost is about 20 MB total.
+
+Snippet contributed by the droste project as a reference consumer.
+
 ## Build
 
 ```bash
@@ -245,4 +315,4 @@ of Canopy is shape, not size.
 
 ---
 
-*Last updated: 2026-04-20 (tenkei 1.4.0, Canopy Phase 3)*
+*Last updated: 2026-04-21 (tenkei 1.4.1; GNU-tool rehydration section added from droste reference consumer)*
