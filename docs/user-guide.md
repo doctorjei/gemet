@@ -267,6 +267,60 @@ See [yggdrasil](yggdrasil.md) for the strip list, shrink phases, boot
 contracts, SSH-key sync, and the canonical downstream-consumption
 pattern.
 
+## Bifrost (SSH-ready variant)
+
+Tenkei publishes `bifrost:<ver>` — Yggdrasil plus an opinionated SSH
+layer for humans and ad-hoc testing. Bifrost re-enables
+`ssh.service`, generates host keys at first boot via
+`bifrost-hostkeys.service` (oneshot `ssh-keygen -A`,
+`RemainAfterExit`), and ships `/etc/bifrost/authorized_keys` as a
+staging path that `bifrost-sshkey-sync.service` merges into
+`/root/.ssh/authorized_keys` non-destructively each boot.
+
+No pre-generated `/etc/ssh/ssh_host_*_key` files are baked into the
+published image — keys are always first-boot. Bifrost derives from
+`yggdrasil-<ver>.tar.xz` in ~30 s and ships the same three artifact
+forms (tar.xz, qcow2, OCI). Size parity with Yggdrasil (~57 MB
+tar.xz / 87 MB qcow2).
+
+Use Bifrost when you want a VM you can SSH into out of the box.
+Kento's E2E test fixtures compose on top of Bifrost for this reason.
+
+See [bifrost](bifrost.md) for the full unit contracts, host-key
+policy rationale, staging-path semantics, and key-rotation notes.
+
+## Canopy (no-init variant)
+
+Tenkei publishes `canopy:<ver>` — Yggdrasil minus the init-family
+(pid1, udev daemon, dbus daemon, init meta-packages). Canopy is
+designed as an OCI base for no-init process containers: consumers
+bring their own pid1 (tini, dumb-init, s6-overlay) or run as bare
+processes. The qcow2 is intentionally not bootable as a standalone
+VM — there is no pid1.
+
+The tagline is "no pid1, no udev daemon, no dbus daemon" — not
+"no systemd at all." A shared-library floor (`libsystemd0`,
+`libsystemd-shared`, `libudev1`, `libpam0g*`) survives because apt
+and util-linux link against it. Those libraries are inert without
+their corresponding daemons running.
+
+Canopy derives from `yggdrasil-<ver>.tar.xz` in ~30 s, is ~10 MB
+smaller than Yggdrasil under xz, and 29 packages lighter (211 →
+182). The motivating downstream consumer is `droste-seed`, which
+collapses to a pure Containerfile (`FROM canopy + useradd + sysctl`)
+with no build script.
+
+Note for downstream consumers: Canopy inherits Yggdrasil's busybox
+shim — `apt install coreutils` silently lands real binaries at
+`.distrib` paths, leaving the busybox shims in place. See the
+["Rehydrating GNU tools"](canopy.md#rehydrating-gnu-tools) section
+in the Canopy docs for the diversion-strip pattern that keeps
+downstream postinsts from failing on GNU long-options.
+
+See [canopy](canopy.md) for the strip list, shared-library floor
+rationale, provenance manifest, residual-cleanup notes, and
+downstream consumption patterns.
+
 ## Kernel Configuration
 
 ### Fragment system
