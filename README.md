@@ -50,7 +50,7 @@ images.
 | OCI      | `yggdrasil:<ver>`                     | minimal Debian 13 + systemd userland (~210-230 MB) — see [docs/yggdrasil.md](docs/yggdrasil.md) |
 | OCI      | `bifrost:<ver>`                       | Yggdrasil + opinionated SSH layer — see [docs/bifrost.md](docs/bifrost.md) |
 | OCI      | `canopy:<ver>`                        | Yggdrasil minus init-family (no-init base) — see [docs/canopy.md](docs/canopy.md) |
-| Tarball  | `build/yggdrasil-<ver>.tar.xz`        | Yggdrasil rootfs for `lxc-create`       |
+| Tarball  | `build/yggdrasil-<ver>.tar.xz`        | Yggdrasil rootfs for `lxc-create` (published as `.txz` on the release page) |
 | Tarball  | `build/bifrost-<ver>.tar.xz`          | Bifrost rootfs (SSH-ready)              |
 | Tarball  | `build/canopy-<ver>.tar.xz`           | Canopy rootfs (no-init)                 |
 | qcow2    | `build/yggdrasil-<ver>.qcow2`         | bootable disk image for `qemu -drive`   |
@@ -192,7 +192,10 @@ tenkei/
 |   +-- test-yggdrasil-disk.sh    # Yggdrasil qcow2 boot smoke test
 |   +-- yggdrasil-smoke-test.sh   # Portable VM boot smoke test (ships with releases)
 |   +-- ci-structural-tests.sh    # CI Tier 1: file/structure checks on build/ artifacts
-|   +-- ci-systemd-test.sh        # CI Tier 2: rootless podman + systemd-in-OCI health
+|   +-- ci-systemd-test.sh        # CI Tier 2: rootless podman + systemd-in-OCI health (yggdrasil)
+|   +-- ci-bifrost-test.sh        # CI Tier 2: bifrost ssh.service contract
+|   +-- ci-canopy-test.sh         # CI Tier 2: canopy no-pid1 structural runtime
+|   +-- ci-vm-boot-test.sh        # CI Tier 3: full VM boot regimen (KVM-capable host)
 |   +-- create-test-rootfs.sh     # Creates minimal Debian rootfs for boot testing
 |   +-- git-upstream.sh           # Manage upstream kata subtree imports
 +-- docs/
@@ -220,12 +223,13 @@ Tagged releases (`v*`) are built automatically by
 
 - **GitHub Release attachments** at
   `github.com/doctorjei/tenkei/releases` — `vmlinuz`,
-  `tenkei-initramfs.img`, `yggdrasil-<ver>.{tar.xz,qcow2}`, and OCI
-  archives for both images.
+  `tenkei-initramfs.img`, `{yggdrasil,bifrost,canopy}-<ver>.{txz,qcow2}`
+  (rootfs tarballs published as `.txz` on the release page; build
+  scripts still emit `.tar.xz` locally until the script-side rename
+  ships), and OCI archives for all four images.
 - **OCI images on GHCR** —
-  `ghcr.io/doctorjei/tenkei/yggdrasil:<ver>` and
-  `ghcr.io/doctorjei/tenkei/tenkei-kernel:<ver>` (both also tagged
-  `:latest`).
+  `ghcr.io/doctorjei/tenkei/{yggdrasil,bifrost,canopy,tenkei-kernel}:<ver>`
+  (all also tagged `:latest`).
 
 Consumers can `podman pull` the GHCR images or download the tarball/qcow2
 forms directly from the release page. See

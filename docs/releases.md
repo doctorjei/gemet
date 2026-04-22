@@ -15,14 +15,28 @@ runs structural and systemd-in-OCI health checks, and publishes the release.
 
 Attached to the release page at `github.com/doctorjei/tenkei/releases/tag/v<ver>`:
 
-| File                               | Size    | Purpose                                                              |
-|------------------------------------|--------:|----------------------------------------------------------------------|
-| `vmlinuz`                          | ~7.5 MB | Compressed kernel. Drop at `build/vmlinuz` to skip local compile.    |
-| `tenkei-initramfs.img`             | ~1.1 MB | gzip+cpio initramfs (busybox + virtiofs-aware init script).           |
-| `yggdrasil-<ver>.tar.xz`           |  ~56 MB | Yggdrasil rootfs tarball for `lxc-create` or manual extraction.       |
-| `yggdrasil-<ver>.qcow2`            |  ~87 MB | Bootable partition-less ext4 disk image for `qemu -drive`.             |
-| `yggdrasil-<ver>-oci.tar`          |  ~84 MB | OCI archive of the Yggdrasil image (for air-gapped `podman load`).    |
-| `tenkei-kernel-<ver>-oci.tar`      |  ~8.4 MB | OCI archive of the kernel-only image (multi-stage `COPY --from=`).    |
+| File                               | Size     | Purpose                                                              |
+|------------------------------------|---------:|----------------------------------------------------------------------|
+| `vmlinuz`                          | ~7.5 MB  | Compressed kernel. Drop at `build/vmlinuz` to skip local compile.    |
+| `tenkei-initramfs.img`             | ~1.1 MB  | gzip+cpio initramfs (busybox + virtiofs-aware init script).          |
+| `yggdrasil-<ver>.txz`              |  ~57 MB  | Yggdrasil rootfs tarball (xz-compressed).                            |
+| `yggdrasil-<ver>.qcow2`            |  ~87 MB  | Bootable partition-less ext4 disk image for `qemu -drive`.           |
+| `yggdrasil-<ver>-oci.tar`          |  ~84 MB  | OCI archive of the Yggdrasil image (air-gapped `podman load`).       |
+| `bifrost-<ver>.txz`                |  ~57 MB  | Bifrost (SSH-ready) rootfs tarball.                                  |
+| `bifrost-<ver>.qcow2`              |  ~87 MB  | Bootable Bifrost disk image.                                         |
+| `bifrost-<ver>-oci.tar`            |  ~85 MB  | OCI archive of the Bifrost image.                                    |
+| `canopy-<ver>.txz`                 |  ~46 MB  | Canopy (no-init) rootfs tarball. Not independently bootable.         |
+| `canopy-<ver>.qcow2`               |  ~71 MB  | Canopy disk image (composition base — no pid1).                      |
+| `canopy-<ver>-oci.tar`             |  ~68 MB  | OCI archive of the Canopy image.                                     |
+| `tenkei-kernel-<ver>-oci.tar`      |  ~8.4 MB | OCI archive of the kernel-only image (multi-stage `COPY --from=`).   |
+
+Rootfs archives are published as `.txz` on the release page as of
+v1.4.2 (same xz format, shorter canonical extension — was `.tar.xz`
+through v1.4.1). The build scripts still produce `.tar.xz` in
+`build/` locally; the rename is a release-page-only change. Full
+script-side `.tar.xz → .txz` rename and OCI attachment
+xz-compression are tracked in `~/playbook/tasks.md` "Do Eventually";
+GHCR push format (uncompressed OCI) does not change.
 
 ### OCI images on GHCR
 
@@ -30,22 +44,42 @@ Pushed to `ghcr.io/doctorjei/tenkei/` at both the exact version and `:latest`:
 
 | Image                                                | What it contains                                               |
 |------------------------------------------------------|----------------------------------------------------------------|
-| `ghcr.io/doctorjei/tenkei/yggdrasil:<ver>`           | Full Yggdrasil rootfs. See [yggdrasil.md](yggdrasil.md).       |
-| `ghcr.io/doctorjei/tenkei/yggdrasil:latest`          | Alias for the most recent tagged release.                      |
+| `ghcr.io/doctorjei/tenkei/yggdrasil:<ver>`           | Yggdrasil rootfs (Debian + systemd). See [yggdrasil.md](yggdrasil.md). |
+| `ghcr.io/doctorjei/tenkei/bifrost:<ver>`             | Yggdrasil + SSH opinion layer. See [bifrost.md](bifrost.md).   |
+| `ghcr.io/doctorjei/tenkei/canopy:<ver>`              | Yggdrasil minus init-family (no pid1). See [canopy.md](canopy.md). |
 | `ghcr.io/doctorjei/tenkei/tenkei-kernel:<ver>`       | `/boot/vmlinuz` + `/boot/initramfs.img`. See [kernel-as-oci.md](kernel-as-oci.md). |
-| `ghcr.io/doctorjei/tenkei/tenkei-kernel:latest`      | Alias for the most recent tagged release.                      |
+| `...:latest`                                         | Alias for the most recent tagged release (all 4 images).       |
 
 Pulls work anonymously for public images:
 
 ```bash
-podman pull ghcr.io/doctorjei/tenkei/yggdrasil:1.2.0
-podman pull ghcr.io/doctorjei/tenkei/tenkei-kernel:1.2.0
+podman pull ghcr.io/doctorjei/tenkei/yggdrasil:1.4.2
+podman pull ghcr.io/doctorjei/tenkei/bifrost:1.4.2
+podman pull ghcr.io/doctorjei/tenkei/canopy:1.4.2
+podman pull ghcr.io/doctorjei/tenkei/tenkei-kernel:1.4.2
 ```
 
 Downstream multi-stage consumers (droste, kento test fixtures) should pull
 `tenkei-kernel:<ver>` in a `FROM` stage and `COPY --from=` the two boot
 files into their own rootfs image. See
 [docs/kernel-as-oci.md](kernel-as-oci.md) for the canonical pattern.
+
+### Kento composition pattern
+
+Kento (OCI-to-LXC/VM runner) expects a **single composed image** with
+both rootfs and `/boot/{vmlinuz,initramfs.img}` present. Compose the
+two tenkei images with a two-line Containerfile:
+
+```dockerfile
+FROM ghcr.io/doctorjei/tenkei/tenkei-kernel:1.4.2 AS kernel
+FROM ghcr.io/doctorjei/tenkei/bifrost:1.4.2
+COPY --from=kernel /boot/vmlinuz /boot/vmlinuz
+COPY --from=kernel /boot/initramfs.img /boot/initramfs.img
+```
+
+Push the composed image to your own registry (or `podman save` + copy),
+then hand it to `kento vm create --image ...`. Yggdrasil or Canopy work
+as the rootfs base too — pick the one that matches your init needs.
 
 ## Release cadence and the draft gate
 
@@ -98,11 +132,16 @@ Two automated tiers run on every release. The third is currently manual.
 
 | Tier | What                                              | Runs where                | When                    |
 |------|---------------------------------------------------|---------------------------|-------------------------|
-| 1    | File inspection (kernel magic, initramfs cpio, tar.xz size, qcow2 validity, OCI rootfs structure, dpkg DB sanity) | `ubuntu-24.04` GH runner  | Every release + dispatch |
-| 2    | systemd-in-OCI health (rootless podman boots yggdrasil's systemd, checks failed units, python3/bash exec, systemd-analyze verify) | `ubuntu-24.04` GH runner  | Every release + dispatch |
-| 3    | Full VM boot (`yggdrasil-smoke-test.sh`: kernel + initramfs + virtiofs + login prompt) | KVM-capable host          | Manual (pre-publish for draft releases) |
+| 1    | File inspection (kernel magic, initramfs cpio, `.txz` size, qcow2 validity, OCI rootfs structure, dpkg DB sanity) | `ubuntu-24.04` GH runner  | Every release + dispatch |
+| 2    | systemd-in-OCI health (rootless podman boots yggdrasil's and bifrost's systemd; canopy structural check — no pid1) | `ubuntu-24.04` GH runner  | Every release + dispatch |
+| 3    | Full VM boot (`scripts/ci-vm-boot-test.sh`: kernel + initramfs + virtiofs + qcow2 paths, systemd probe markers, bifrost SSH, failure-injection) | KVM-capable host          | Manual (pre-publish for draft releases) |
 
-Tier 1 is `scripts/ci-structural-tests.sh`. Tier 2 is
-`scripts/ci-systemd-test.sh`. Both run locally with the same arguments
-the workflow uses, so developers can reproduce any CI failure without
+Tier 1 is `scripts/ci-structural-tests.sh`. Tier 2 splits across
+`scripts/ci-systemd-test.sh` (yggdrasil), `scripts/ci-bifrost-test.sh`,
+and `scripts/ci-canopy-test.sh`. Tier 3 is `scripts/ci-vm-boot-test.sh`
+(shipped with v1.4.2) — it exercises the actual kernel + initramfs +
+rootfs chain on a KVM host and is the pre-publish gate for draft
+releases. Boot-path regressions (the class that hid behind v1.4.1's
+qcow2-only smoke) are caught here. All scripts run locally with the
+same arguments the workflow uses, so any CI failure reproduces without
 pushing.

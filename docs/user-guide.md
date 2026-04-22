@@ -52,17 +52,19 @@ Requirements: build-essential, flex, bison, bc, libelf-dev, libssl-dev, busybox-
 Tenkei replaces Kata's agent-based initramfs with a minimal one that:
 
 1. Mounts the rootfs — virtiofs share or block device, selected by kernel cmdline
-2. Runs `switch_root` to pivot into it
-3. Execs `/sbin/init` (systemd or whatever the container image provides)
+2. `mount --move`s `/dev /proc /sys` into the new root (so they survive the pivot)
+3. Runs `switch_root -c /dev/console` to pivot into it (the `-c` reopens stdio on the new-root console so kernel messages keep flowing post-pivot)
+4. Execs the init program (defaults to `/sbin/init`; overridable via `init=<path>` on the kernel cmdline, per kernel standard — e.g. `init=/bin/bash` for rescue)
 
-The init script parses `root=` and `rootfstype=` from `/proc/cmdline` and
-dispatches:
+The init script parses `root=`, `rootfstype=`, and `init=` from
+`/proc/cmdline` and dispatches:
 
-| cmdline                                 | mount                                    |
+| cmdline                                 | behavior                                 |
 |-----------------------------------------|------------------------------------------|
 | `root=rootfs rootfstype=virtiofs`       | virtiofs (tag `rootfs`), dax=inode if supported (graceful fallback) |
 | `root=/dev/vdaN rootfstype=ext4` (etc.) | block device (e.g. a qcow2 disk image)   |
 | unset                                   | defaults to virtiofs (back-compat with kento) |
+| `init=<path>`                           | exec `<path>` as pid1 after pivot (default `/sbin/init`) |
 
 The block-device branch supports Yggdrasil's qcow2 artifact form: the disk
 is a partition-less ext4 filesystem with no bootloader (the whole device
@@ -70,7 +72,15 @@ is a partition-less ext4 filesystem with no bootloader (the whole device
 kernel + initramfs boot it externally via `qemu -kernel … -initrd …
 -drive yggdrasil.qcow2 -append "root=/dev/vda rootfstype=ext4 …"`.
 
-On any mount failure, the init drops to `/bin/sh` (emergency shell).
+On any mount failure, the init drops to `/bin/sh` (emergency shell) —
+this is an explicit marker on the console rather than a silent hang, so
+boot failures are diagnosable. (The switch_root hang pre-v1.4.2 was the
+exception that motivated the `mount --move` + `-c /dev/console` fix.)
+
+**`init=` override.** Prior to v1.4.2, this argument was silently ignored
+(init was hardcoded to `/sbin/init`). Since v1.4.2, it honors the
+kernel-standard contract. Use this for rescue (`init=/bin/bash`) or
+bring-up diagnostics (`init=/some-diag-probe`).
 
 To build:
 
@@ -152,7 +162,22 @@ qemu-system-x86_64 \
 Kento provides full VM lifecycle management using tenkei's kernel and initramfs.
 The OCI image must include `/boot/vmlinuz` and `/boot/initramfs.img` (typically
 added by a [droste](https://github.com/doctorjei/droste) image layer, where droste
-is the project's nested-virt VM image builder).
+is the project's nested-virt VM image builder — or via a two-line compose
+against `ghcr.io/doctorjei/tenkei/tenkei-kernel:<ver>`, see below).
+
+**Quick compose against tenkei's GHCR images.** The simplest path is to
+stack the kernel image onto one of tenkei's rootfs images:
+
+```dockerfile
+FROM ghcr.io/doctorjei/tenkei/tenkei-kernel:1.4.2 AS kernel
+FROM ghcr.io/doctorjei/tenkei/bifrost:1.4.2
+COPY --from=kernel /boot/vmlinuz /boot/vmlinuz
+COPY --from=kernel /boot/initramfs.img /boot/initramfs.img
+```
+
+Swap `bifrost` for `yggdrasil` (no SSH layer) or `canopy` (no-init, for
+downstream composition). Push the composed image to your own registry,
+then hand it to `kento vm create --image <ref>`.
 
 ```bash
 # Create a VM from an OCI image (--vm flag is required)
@@ -225,7 +250,8 @@ commands, downstream pattern, and version compatibility notes.
 Tenkei publishes `yggdrasil:<ver>` — a minimal Debian 13 + systemd OCI
 image intended as the foundation for downstream rootfs builds (droste
 tiers, kento test fixtures, user-defined images). It ships in three
-artifact forms: OCI image, `.tar.xz` tarball, and qcow2 disk image.
+artifact forms: OCI image, `.tar.xz` tarball (published as `.txz` on
+the release page), and qcow2 disk image.
 
 As of 1.2.0, the rootfs is ~210-230 MB (down from ~377 MB) thanks to a
 multi-phase shrink pass applied at build time: BusyBox swap for 18
@@ -280,8 +306,8 @@ staging path that `bifrost-sshkey-sync.service` merges into
 No pre-generated `/etc/ssh/ssh_host_*_key` files are baked into the
 published image — keys are always first-boot. Bifrost derives from
 `yggdrasil-<ver>.tar.xz` in ~30 s and ships the same three artifact
-forms (tar.xz, qcow2, OCI). Size parity with Yggdrasil (~57 MB
-tar.xz / 87 MB qcow2).
+forms (tarball, qcow2, OCI). Size parity with Yggdrasil (~57 MB
+tarball / 87 MB qcow2).
 
 Use Bifrost when you want a VM you can SSH into out of the box.
 Kento's E2E test fixtures compose on top of Bifrost for this reason.
