@@ -3,7 +3,7 @@
 Yggdrasil is tenkei's minimal Debian 13 + systemd foundation image. It serves
 as the base layer for downstream rootfs builds (droste tiers, kento test
 fixtures, user-defined images) and is published in three artifact forms: OCI
-image, `.tar.xz` tarball, and qcow2 disk image.
+image, `.txz` tarball (xz-compressed), and qcow2 disk image.
 
 As of 1.2.0, the build applies a multi-phase shrink pass (BusyBox swap,
 targeted purges, doc/locale/man sweep, python library trim) that reduces
@@ -211,13 +211,13 @@ worth the trade-off.
 ## Build
 
 ```bash
-sudo bash rootfs/build-yggdrasil.sh           # OCI + .tar.xz + qcow2 (default)
+sudo bash rootfs/build-yggdrasil.sh           # OCI + .txz + qcow2 (default)
 ```
 
 `build-yggdrasil.sh` produces all three artifacts by default:
 
 - OCI image `yggdrasil:<version>` (version from tenkei's `VERSION` file)
-- `build/yggdrasil-<version>.tar.xz`
+- `build/yggdrasil-<version>.txz`
 - `build/yggdrasil-<version>.qcow2`
 
 The qcow2 is extracted from the built rootfs using `debugfs rdump`
@@ -240,12 +240,12 @@ same rootfs work directory in a single build invocation:
 | Form        | Output                                    | Primary consumer                         |
 |-------------|-------------------------------------------|------------------------------------------|
 | OCI image   | `yggdrasil:<ver>` (in podman/docker)      | droste tiers, kento test fixtures        |
-| `.tar.xz`   | `build/yggdrasil-<ver>.tar.xz`            | `lxc-create -t local --rootfs=<tarball>` |
+| `.txz`      | `build/yggdrasil-<ver>.txz`               | `lxc-create -t local --rootfs=<tarball>` |
 | qcow2       | `build/yggdrasil-<ver>.qcow2`             | External boot via `qemu -kernel -initrd` |
 
 Tagged releases publish the OCI image to GHCR at
 `ghcr.io/doctorjei/tenkei/yggdrasil:<ver>` (and `:latest`), and the
-tar.xz + qcow2 + `.oci.tar` forms as GitHub Release attachments. See
+.txz + qcow2 + `-oci.txz` forms as GitHub Release attachments. See
 [releases.md](releases.md) for pull commands and the full artifact
 inventory.
 
@@ -361,7 +361,7 @@ a `RUN` step in the tier's Containerfile.
 **Bifrost** is the first-party SSH-ready companion image: Yggdrasil plus
 an opinionated SSH layer (sshd enabled, host keys generated at first
 boot, `/etc/bifrost/authorized_keys` sync). It's built as a derived
-image from an existing `yggdrasil-<ver>.tar.xz`. If you want an
+image from an existing `yggdrasil-<ver>.txz`. If you want an
 SSH-ready base for humans or ad-hoc testing, use `bifrost:<ver>`
 directly; if you need a different user model, build `FROM
 yggdrasil:<ver>` and roll your own. See [bifrost.md](bifrost.md).
@@ -372,7 +372,7 @@ Canopy **removes** it: the init-family (systemd pid1, udev daemon,
 dbus daemon, init meta-packages and their cascade) is purged, leaving
 a base suitable for no-init process containers where the caller brings
 their own pid1 (tini, dumb-init) or runs as a bare process. It's built
-as a derived image from the same `yggdrasil-<ver>.tar.xz`. The
+as a derived image from the same `yggdrasil-<ver>.txz`. The
 motivating consumer is `droste-seed`. See [canopy.md](canopy.md).
 
 ## Testing

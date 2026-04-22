@@ -2,10 +2,10 @@
 #
 # build-canopy — Derived image builder: yggdrasil minus init-family
 #
-# Canopy is a derived image. This script extracts the Yggdrasil tar.xz,
+# Canopy is a derived image. This script extracts the Yggdrasil .txz,
 # chroots into it, purges the init-family (systemd pid1, udev daemon,
 # dbus daemon, init meta-packages and their direct dependents), cleans
-# up residual conffiles and unit directories, and re-packages as tar.xz
+# up residual conffiles and unit directories, and re-packages as .txz
 # / qcow2 / OCI.
 #
 # Audience: no-init process containers. Downstream consumers bring
@@ -15,17 +15,17 @@
 # be removed without breaking package management.
 #
 # Preconditions:
-#   - build/yggdrasil-<VERSION>.tar.xz must exist (from `rootfs/build-yggdrasil.sh`)
+#   - build/yggdrasil-<VERSION>.txz must exist (from `rootfs/build-yggdrasil.sh`)
 #
 # Usage:
 #   build-canopy.sh                         # build everything (reads VERSION)
 #   build-canopy.sh 1.2.0                   # build for an explicit version
-#   build-canopy.sh --no-txz                # skip .tar.xz tarball
+#   build-canopy.sh --no-txz                # skip .txz tarball
 #   build-canopy.sh --no-qcow2              # skip .qcow2 disk image
 #   build-canopy.sh --no-import             # skip OCI import
 #
 # Produces (by default):
-#   - Tarball     build/canopy-<version>.tar.xz
+#   - Tarball     build/canopy-<version>.txz
 #   - Disk image  build/canopy-<version>.qcow2
 #   - OCI image   canopy:<version> (in podman/docker)
 #
@@ -64,19 +64,19 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS] [VERSION]
 
-Build the Canopy derived image from an existing Yggdrasil tar.xz.
+Build the Canopy derived image from an existing Yggdrasil .txz.
 
 Canopy = Yggdrasil minus the init-family. No systemd pid1, no udev
 daemon, no dbus daemon, no init meta-packages. Shared-library floor
 (libsystemd0, libudev1, libpam*) is kept — apt links against it.
 
 Preconditions:
-  build/yggdrasil-<VERSION>.tar.xz must already exist. Run
+  build/yggdrasil-<VERSION>.txz must already exist. Run
   'bash rootfs/build-yggdrasil.sh' first if it does not.
 
 Options:
       --no-import      Skip OCI import
-      --no-txz         Skip .tar.xz tarball output
+      --no-txz         Skip .txz tarball output
       --no-qcow2       Skip .qcow2 disk image output
   -h, --help           Show help
 
@@ -116,8 +116,8 @@ fi
 [[ -n "$VERSION" ]] || error "VERSION is empty"
 IMAGE_TAG="canopy:$VERSION"
 
-YGG_TXZ="$BUILD_DIR/yggdrasil-${VERSION}.tar.xz"
-CANOPY_TXZ="$BUILD_DIR/canopy-${VERSION}.tar.xz"
+YGG_TXZ="$BUILD_DIR/yggdrasil-${VERSION}.txz"
+CANOPY_TXZ="$BUILD_DIR/canopy-${VERSION}.txz"
 CANOPY_QCOW2="$BUILD_DIR/canopy-${VERSION}.qcow2"
 
 # ── Prerequisites ───────────────────────────────────────────────────
@@ -149,7 +149,7 @@ if $DO_IMPORT; then
     fi
 fi
 
-# ── Precondition: yggdrasil tar.xz must exist ──────────────────────
+# ── Precondition: yggdrasil .txz must exist ──────────────────────
 if [[ ! -f "$YGG_TXZ" ]]; then
     error "$YGG_TXZ not found.
 Canopy is a derived image — it requires a Yggdrasil tarball as its
@@ -157,7 +157,7 @@ base. Run:
 
     bash rootfs/build-yggdrasil.sh
 
-to produce build/yggdrasil-${VERSION}.tar.xz first, then re-run this
+to produce build/yggdrasil-${VERSION}.txz first, then re-run this
 script."
 fi
 
@@ -299,7 +299,7 @@ error() { echo -e "\033[1;31mERROR:\033[0m \$*" >&2; exit 1; }
 
 info "[userns] uid=\$(id -u) euid=\$EUID"
 
-# ── Extract yggdrasil tar.xz ───────────────────────────────────────
+# ── Extract yggdrasil .txz ─────────────────────────────────────────
 info "Extracting \$YGG_TXZ..."
 tar -xJf "\$YGG_TXZ" -C "\$WORK_DIR"
 [[ -d "\$WORK_DIR/etc" && -d "\$WORK_DIR/usr" ]] || error "extraction did not yield a rootfs"
@@ -364,7 +364,7 @@ if \$DO_IMPORT; then
 fi
 
 if \$DO_TXZ; then
-    info "Writing tar.xz artifact \$CANOPY_TXZ..."
+    info "Writing .txz artifact \$CANOPY_TXZ..."
     tar -cJf "\$CANOPY_TXZ" -C "\$WORK_DIR" .
     info "Tarball size: \$(du -h "\$CANOPY_TXZ" | awk '{print \$1}')"
 fi
@@ -394,7 +394,7 @@ OCI_IMPORTED=false
 if $DO_IMPORT; then
     info "Importing into $CONTAINER_CMD as $IMAGE_TAG..."
     # Expected failure path in kanibako (newuidmap limits on rootless
-    # podman). Treat import as non-fatal so tar.xz + qcow2 remain the
+    # podman). Treat import as non-fatal so .txz + qcow2 remain the
     # usable primary artifacts in dev-container environments. CI runners
     # with working podman will succeed here and save the OCI archive
     # downstream (handled by the release workflow, not this script).
@@ -406,7 +406,7 @@ if $DO_IMPORT; then
             awk '{printf "Image size: %.0f MB\n", $1/1024/1024}' || true
     else
         warn "OCI import failed — newuidmap limitations in kanibako are expected."
-        warn "tar.xz + qcow2 are still produced and are the primary artifacts."
+        warn ".txz + qcow2 are still produced and are the primary artifacts."
     fi
 fi
 

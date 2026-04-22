@@ -30,13 +30,13 @@
 # Usage:
 #   build-yggdrasil.sh                       # build everything
 #   build-yggdrasil.sh --no-import           # skip OCI import
-#   build-yggdrasil.sh --no-txz              # skip .tar.xz tarball
+#   build-yggdrasil.sh --no-txz              # skip .txz tarball
 #   build-yggdrasil.sh --no-qcow2            # skip .qcow2 disk image
 #   build-yggdrasil.sh --no-shrink           # skip phases 1-4 (1.1.0-equivalent)
 #
 # Produces (by default):
 #   - OCI image   yggdrasil:<version>
-#   - Tarball     build/yggdrasil-<version>.tar.xz
+#   - Tarball     build/yggdrasil-<version>.txz
 #   - Disk image  build/yggdrasil-<version>.qcow2
 #
 # Requires: fdisk, debugfs, tar, qemu-img, mkfs.ext4, curl, unshare.
@@ -127,11 +127,11 @@ Build the Yggdrasil OCI base image from the Debian 13 genericcloud tar.xz.
 
 Runs a five-phase rootfs shrink (phase 0 matches 1.1.0; phases 1-4 add
 busybox swap, targeted purges, sweep trims, and python library purge),
-then produces tar.xz / OCI / qcow2 artifacts.
+then produces .txz / OCI / qcow2 artifacts.
 
 Options:
       --no-import      Skip OCI import
-      --no-txz         Skip .tar.xz tarball output
+      --no-txz         Skip .txz tarball output
       --no-qcow2       Skip .qcow2 disk image output
       --no-shrink      Skip phases 1-4 (1.1.0-equivalent image)
   -h, --help           Show help
@@ -290,7 +290,7 @@ if [[ -f "$UNSHIM_SCRIPT" ]] && [[ -f "$REHYDRATE_SCRIPT" ]]; then
 fi
 
 # ── Generate inner-phase.sh (runs inside unshare userns) ────────────
-TXZ_PATH="$BUILD_DIR/yggdrasil-${VERSION}.tar.xz"
+TXZ_PATH="$BUILD_DIR/yggdrasil-${VERSION}.txz"
 QCOW2_PATH="$BUILD_DIR/yggdrasil-${VERSION}.qcow2"
 IMPORT_TAR="$SCRATCH/import.tar"
 
@@ -708,7 +708,7 @@ if \$DO_IMPORT; then
 fi
 
 if \$DO_TXZ; then
-    info "Writing tar.xz artifact \$TXZ_PATH..."
+    info "Writing .txz artifact \$TXZ_PATH..."
     mkdir -p "\$BUILD_DIR"
     tar -cJf "\$TXZ_PATH" -C "\$WORK_DIR" .
     info "Tarball size: \$(du -h "\$TXZ_PATH" | awk '{print \$1}')"

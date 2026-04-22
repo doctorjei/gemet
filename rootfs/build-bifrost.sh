@@ -2,10 +2,10 @@
 #
 # build-bifrost — Derived image builder: yggdrasil + opinionated SSH layer
 #
-# Bifrost is a derived image. This script extracts the Yggdrasil tar.xz,
+# Bifrost is a derived image. This script extracts the Yggdrasil .txz,
 # overlays the bifrost policy bits (host-key first-boot generation +
 # /etc/bifrost/authorized_keys sync machinery + sshd enabled), and
-# re-packages as tar.xz / qcow2 / OCI.
+# re-packages as .txz / qcow2 / OCI.
 #
 # No podman build. No chroot. The overlay is a handful of file installs
 # and symlink creations — identical to what `systemctl enable` would do,
@@ -13,17 +13,17 @@
 # namespace (no dbus, no running systemd).
 #
 # Preconditions:
-#   - build/yggdrasil-<VERSION>.tar.xz must exist (from `rootfs/build-yggdrasil.sh`)
+#   - build/yggdrasil-<VERSION>.txz must exist (from `rootfs/build-yggdrasil.sh`)
 #
 # Usage:
 #   build-bifrost.sh                         # build everything (reads VERSION)
 #   build-bifrost.sh 1.2.0                   # build for an explicit version
-#   build-bifrost.sh --no-txz                # skip .tar.xz tarball
+#   build-bifrost.sh --no-txz                # skip .txz tarball
 #   build-bifrost.sh --no-qcow2              # skip .qcow2 disk image
 #   build-bifrost.sh --no-import             # skip OCI import (also skips -oci.tar)
 #
 # Produces (by default):
-#   - Tarball     build/bifrost-<version>.tar.xz
+#   - Tarball     build/bifrost-<version>.txz
 #   - Disk image  build/bifrost-<version>.qcow2
 #   - OCI image   bifrost:<version> (in podman/docker)
 #   - OCI archive build/bifrost-<version>-oci.tar
@@ -58,18 +58,18 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS] [VERSION]
 
-Build the Bifrost derived image from an existing Yggdrasil tar.xz.
+Build the Bifrost derived image from an existing Yggdrasil .txz.
 
 Bifrost = Yggdrasil + opinionated SSH layer (sshd enabled, host keys
 generated at first boot, /etc/bifrost/authorized_keys sync).
 
 Preconditions:
-  build/yggdrasil-<VERSION>.tar.xz must already exist. Run
+  build/yggdrasil-<VERSION>.txz must already exist. Run
   'bash rootfs/build-yggdrasil.sh' first if it does not.
 
 Options:
       --no-import      Skip OCI import (also skips -oci.tar archive)
-      --no-txz         Skip .tar.xz tarball output
+      --no-txz         Skip .txz tarball output
       --no-qcow2       Skip .qcow2 disk image output
   -h, --help           Show help
 
@@ -109,8 +109,8 @@ fi
 [[ -n "$VERSION" ]] || error "VERSION is empty"
 IMAGE_TAG="bifrost:$VERSION"
 
-YGG_TXZ="$BUILD_DIR/yggdrasil-${VERSION}.tar.xz"
-BIFROST_TXZ="$BUILD_DIR/bifrost-${VERSION}.tar.xz"
+YGG_TXZ="$BUILD_DIR/yggdrasil-${VERSION}.txz"
+BIFROST_TXZ="$BUILD_DIR/bifrost-${VERSION}.txz"
 BIFROST_QCOW2="$BUILD_DIR/bifrost-${VERSION}.qcow2"
 BIFROST_OCI="$BUILD_DIR/bifrost-${VERSION}-oci.tar"
 
@@ -147,7 +147,7 @@ fi
 [[ -f "$SYNC_UNIT"     ]] || error "missing unit file: $SYNC_UNIT"
 [[ -f "$SYNC_SCRIPT"   ]] || error "missing script:    $SYNC_SCRIPT"
 
-# ── Precondition: yggdrasil tar.xz must exist ──────────────────────
+# ── Precondition: yggdrasil .txz must exist ──────────────────────
 if [[ ! -f "$YGG_TXZ" ]]; then
     error "$YGG_TXZ not found.
 Bifrost is a derived image — it requires a post-Phase-1 Yggdrasil
@@ -155,7 +155,7 @@ tarball as its base. Run:
 
     bash rootfs/build-yggdrasil.sh
 
-to produce build/yggdrasil-${VERSION}.tar.xz first, then re-run this
+to produce build/yggdrasil-${VERSION}.txz first, then re-run this
 script."
 fi
 
@@ -201,7 +201,7 @@ error() { echo -e "\033[1;31mERROR:\033[0m \$*" >&2; exit 1; }
 
 info "[userns] uid=\$(id -u) euid=\$EUID"
 
-# ── Extract yggdrasil tar.xz ───────────────────────────────────────
+# ── Extract yggdrasil .txz ─────────────────────────────────────────
 info "Extracting \$YGG_TXZ..."
 tar -xJf "\$YGG_TXZ" -C "\$WORK_DIR"
 [[ -d "\$WORK_DIR/etc" && -d "\$WORK_DIR/usr" ]] || error "extraction did not yield a rootfs"
@@ -250,7 +250,7 @@ if \$DO_IMPORT; then
 fi
 
 if \$DO_TXZ; then
-    info "Writing tar.xz artifact \$BIFROST_TXZ..."
+    info "Writing .txz artifact \$BIFROST_TXZ..."
     tar -cJf "\$BIFROST_TXZ" -C "\$WORK_DIR" .
     info "Tarball size: \$(du -h "\$BIFROST_TXZ" | awk '{print \$1}')"
 fi
@@ -280,7 +280,7 @@ OCI_SAVED=false
 if $DO_IMPORT; then
     info "Importing into $CONTAINER_CMD as $IMAGE_TAG..."
     # Expected failure path in kanibako (newuidmap limits on rootless
-    # podman). Treat import as non-fatal so tar.xz + qcow2 remain the
+    # podman). Treat import as non-fatal so .txz + qcow2 remain the
     # usable primary artifacts in dev-container environments.
     if $CONTAINER_CMD import "$IMPORT_TAR" "$IMAGE_TAG"; then
         echo ""
@@ -297,7 +297,7 @@ if $DO_IMPORT; then
         fi
     else
         warn "$CONTAINER_CMD import failed (expected in kanibako due to"
-        warn "newuidmap limits on rootless podman). tar.xz + qcow2 are"
+        warn "newuidmap limits on rootless podman). .txz + qcow2 are"
         warn "still produced and are the primary artifacts."
     fi
 fi

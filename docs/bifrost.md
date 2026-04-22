@@ -8,8 +8,8 @@ at first boot, sshd enabled, and a `/etc/bifrost/authorized_keys` staging
 path for pre-boot key injection.
 
 Bifrost is a derived image: `rootfs/build-bifrost.sh` extracts an
-existing `yggdrasil-<ver>.tar.xz`, overlays the bifrost bits, and
-re-packages as tar.xz / qcow2 / OCI. No `podman build` dependency —
+existing `yggdrasil-<ver>.txz`, overlays the bifrost bits, and
+re-packages as .txz / qcow2 / OCI. No `podman build` dependency —
 the overlay is plain file installs plus `systemctl enable`-equivalent
 symlinks, executed inside an unprivileged user namespace.
 
@@ -138,7 +138,7 @@ bash rootfs/build-bifrost.sh --no-qcow2   # skip disk image
 bash rootfs/build-bifrost.sh --no-import  # skip OCI import + archive
 ```
 
-**Prerequisite:** `build/yggdrasil-<version>.tar.xz` must already exist
+**Prerequisite:** `build/yggdrasil-<version>.txz` must already exist
 (produced by `bash rootfs/build-yggdrasil.sh`). Bifrost is a derived
 image — it extracts the Yggdrasil tarball as its base, overlays the
 bifrost bits, and re-packages. If the tarball is missing the build
@@ -151,7 +151,7 @@ The same flag family as `build-yggdrasil.sh`: `--no-import`, `--no-txz`,
 
 `build-bifrost.sh` produces up to three artifacts:
 
-- `build/bifrost-<ver>.tar.xz` — rootfs tarball
+- `build/bifrost-<ver>.txz` — rootfs tarball (xz-compressed)
 - `build/bifrost-<ver>.qcow2` — partition-less ext4 disk image (same
   layout as yggdrasil's qcow2; boot with
   `root=/dev/vda rootfstype=ext4`)
@@ -159,7 +159,7 @@ The same flag family as `build-yggdrasil.sh`: `--no-import`, `--no-txz`,
   `bifrost:<ver>` and then `podman save --format=oci-archive`)
 
 Rootless podman import fails in kanibako (newuidmap limits); the build
-script treats that as a warning and continues with tar.xz + qcow2.
+script treats that as a warning and continues with .txz + qcow2.
 Published releases run in CI where rootless podman works.
 
 ## Downstream consumption

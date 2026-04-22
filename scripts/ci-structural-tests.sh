@@ -12,7 +12,7 @@
 # Variant auto-detection:
 #   The yggdrasil + tenkei-kernel checks always run (they are required
 #   artifacts for every tenkei release). The bifrost + canopy check
-#   blocks auto-detect based on whether their tar.xz artifact exists
+#   blocks auto-detect based on whether their .txz artifact exists
 #   in --build-dir — so local partial builds (yggdrasil-only) still
 #   run clean. CI always produces all three variants, so all checks
 #   fire there.
@@ -185,16 +185,16 @@ else
 fi
 echo ""
 
-# ─── Check 4: yggdrasil-<ver>.tar.xz ──────────────────────────────
-info "Check 4: yggdrasil-${VERSION}.tar.xz"
-TARXZ="$BUILD_DIR/yggdrasil-${VERSION}.tar.xz"
+# ─── Check 4: yggdrasil-<ver>.txz ─────────────────────────────────
+info "Check 4: yggdrasil-${VERSION}.txz"
+TARXZ="$BUILD_DIR/yggdrasil-${VERSION}.txz"
 if [[ ! -f "$TARXZ" ]]; then
     fail "tarball not found at $TARXZ"
 elif [[ ! -s "$TARXZ" ]]; then
     fail "tarball is zero-length: $TARXZ"
 else
     if ! tar -tJf "$TARXZ" >/dev/null 2>&1; then
-        fail "tar -tJf failed — archive is corrupt or not a tar.xz"
+        fail "tar -tJf failed — archive is corrupt or not a .txz"
     else
         # Read uncompressed size via xz --robot (machine-readable).
         uncompressed=$(xz -l --robot "$TARXZ" 2>/dev/null \
@@ -204,7 +204,7 @@ else
         else
             MB=$((uncompressed / 1024 / 1024))
             if (( MB >= 200 && MB <= 280 )); then
-                pass "tar.xz OK, uncompressed ${MB} MB (within 200-280 MB)"
+                pass ".txz OK, uncompressed ${MB} MB (within 200-280 MB)"
             else
                 fail "uncompressed size ${MB} MB outside 200-280 MB bounds"
             fi
@@ -319,11 +319,11 @@ echo ""
 
 # ─── Bifrost variant (auto-detected) ──────────────────────────────
 # Bifrost is a derived image (yggdrasil + SSH layer). On a CI runner all
-# three artifacts (tar.xz, qcow2, -oci.tar) exist. In dev containers
+# three artifacts (.txz, qcow2, -oci.tar) exist. In dev containers
 # without working rootless podman (kanibako) the -oci.tar is skipped
-# by the build script; we detect-via-tar.xz and then check the OCI
+# by the build script; we detect-via-.txz and then check the OCI
 # block only when the archive is actually present.
-BIFROST_TXZ="$BUILD_DIR/bifrost-${VERSION}.tar.xz"
+BIFROST_TXZ="$BUILD_DIR/bifrost-${VERSION}.txz"
 BIFROST_QCOW2="$BUILD_DIR/bifrost-${VERSION}.qcow2"
 BIFROST_OCI="$BUILD_DIR/bifrost-${VERSION}-oci.tar"
 
@@ -334,12 +334,12 @@ else
     info "Bifrost variant detected — running bifrost checks"
     echo ""
 
-    # ─── Check 8: bifrost-<ver>.tar.xz ────────────────────────────
-    info "Check 8: bifrost-${VERSION}.tar.xz"
+    # ─── Check 8: bifrost-<ver>.txz ───────────────────────────────
+    info "Check 8: bifrost-${VERSION}.txz"
     if [[ ! -s "$BIFROST_TXZ" ]]; then
         fail "bifrost tarball is zero-length: $BIFROST_TXZ"
     elif ! tar -tJf "$BIFROST_TXZ" >/dev/null 2>&1; then
-        fail "tar -tJf failed on bifrost tarball — corrupt or not a tar.xz"
+        fail "tar -tJf failed on bifrost tarball — corrupt or not a .txz"
     else
         # Uncompressed size band. Bifrost = Yggdrasil + a handful of tiny
         # overlay files, so the range tracks yggdrasil (200-280 MB) with a
@@ -385,9 +385,9 @@ else
             fi
 
             if [[ -z "$bad" ]]; then
-                pass "bifrost tar.xz OK, uncompressed ${MB} MB, 8 overlay paths present"
+                pass "bifrost .txz OK, uncompressed ${MB} MB, 8 overlay paths present"
             else
-                fail "bifrost tar.xz issues:$bad"
+                fail "bifrost .txz issues:$bad"
             fi
         fi
     fi
@@ -465,7 +465,7 @@ fi
 # Canopy is the no-init variant — init-family purged, shared-library
 # floor kept. Key contract: /sbin/init, /etc/systemd/, and
 # /usr/lib/systemd/ are all ABSENT. apt + bash must still work.
-CANOPY_TXZ="$BUILD_DIR/canopy-${VERSION}.tar.xz"
+CANOPY_TXZ="$BUILD_DIR/canopy-${VERSION}.txz"
 CANOPY_QCOW2="$BUILD_DIR/canopy-${VERSION}.qcow2"
 CANOPY_OCI="$BUILD_DIR/canopy-${VERSION}-oci.tar"
 
@@ -476,12 +476,12 @@ else
     info "Canopy variant detected — running canopy checks"
     echo ""
 
-    # ─── Check 11: canopy-<ver>.tar.xz ────────────────────────────
-    info "Check 11: canopy-${VERSION}.tar.xz"
+    # ─── Check 11: canopy-<ver>.txz ───────────────────────────────
+    info "Check 11: canopy-${VERSION}.txz"
     if [[ ! -s "$CANOPY_TXZ" ]]; then
         fail "canopy tarball is zero-length: $CANOPY_TXZ"
     elif ! tar -tJf "$CANOPY_TXZ" >/dev/null 2>&1; then
-        fail "tar -tJf failed on canopy tarball — corrupt or not a tar.xz"
+        fail "tar -tJf failed on canopy tarball — corrupt or not a .txz"
     else
         uncompressed=$(xz -l --robot "$CANOPY_TXZ" 2>/dev/null \
             | awk '$1=="totals"{print $5}')
@@ -553,9 +553,9 @@ else
             fi
 
             if [[ -z "$bad" ]]; then
-                pass "canopy tar.xz OK, uncompressed ${MB} MB, ${pkgs} pkgs, init-family absent"
+                pass "canopy .txz OK, uncompressed ${MB} MB, ${pkgs} pkgs, init-family absent"
             else
-                fail "canopy tar.xz issues:$bad"
+                fail "canopy .txz issues:$bad"
             fi
         fi
     fi

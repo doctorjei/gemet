@@ -3,9 +3,10 @@
 # extract-oci — Pure-shell rootfs extractor for OCI image archives
 #
 # Reads an OCI image archive (the .tar produced by `podman save
-# --format=oci-archive` or any OCI-spec-conformant image-layout tarball)
-# and writes the merged rootfs to one of three output forms — directory,
-# tarball, or qcow2 — without needing podman, umoci, fuse, or root.
+# --format=oci-archive` or any OCI-spec-conformant image-layout tarball,
+# including xz-compressed variants: `.tar.xz` / `.txz`) and writes the
+# merged rootfs to one of three output forms — directory, tarball, or
+# qcow2 — without needing podman, umoci, fuse, or root.
 #
 # Layer composition follows the OCI image spec: layers are applied in
 # manifest order; whiteout markers are honored after each layer
@@ -144,6 +145,10 @@ fi
 # Default qcow2 label from archive basename: strip suffixes, fall back to "rootfs"
 if [[ "$MODE" == "qcow2" && -z "$LABEL" ]]; then
     LABEL=$(basename "$ARCHIVE")
+    # Accept both the historical .tar.xz suffix and the canonical .txz
+    # suffix (release-page attachments as of v1.5.0).
+    LABEL="${LABEL%.txz}"
+    LABEL="${LABEL%.tar.xz}"
     LABEL="${LABEL%.tar}"
     LABEL="${LABEL%.oci}"
     LABEL="${LABEL%-oci}"
@@ -169,7 +174,10 @@ trap cleanup EXIT
 # ─── Unpack archive ───────────────────────────────────────────────
 SCRATCH=$(mktemp -d "/tmp/extract-oci-scratch.XXXXXX")
 info "Unpacking OCI archive into scratch..."
-tar -xf "$ARCHIVE" -C "$SCRATCH"
+# -a (auto-compression) lets us accept both the uncompressed
+# podman-save .tar and the xz-compressed release-page attachments
+# (.tar.xz and .txz).
+tar -xaf "$ARCHIVE" -C "$SCRATCH"
 
 [[ -f "$SCRATCH/oci-layout" ]] || \
     error "missing oci-layout in archive (not an OCI image-layout tarball?)"

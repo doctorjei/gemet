@@ -9,9 +9,9 @@ for no-init process containers that bring their own pid1 (tini,
 dumb-init, s6-overlay) or run as bare processes.
 
 Canopy is a derived image: `rootfs/build-canopy.sh` extracts an
-existing `yggdrasil-<ver>.tar.xz`, purges the init-family inside a
+existing `yggdrasil-<ver>.txz`, purges the init-family inside a
 chroot, cleans residual conffiles and unit directories, and re-packages
-as tar.xz / qcow2 / OCI. Same derivation pattern as Bifrost, inverted
+as .txz / qcow2 / OCI. Same derivation pattern as Bifrost, inverted
 intent.
 
 ## What it is
@@ -263,7 +263,7 @@ bash rootfs/build-canopy.sh --no-import  # skip OCI import
 bash rootfs/build-canopy.sh --no-txz     # skip tarball
 ```
 
-**Prerequisite:** `build/yggdrasil-<version>.tar.xz` must already exist
+**Prerequisite:** `build/yggdrasil-<version>.txz` must already exist
 (produced by `bash rootfs/build-yggdrasil.sh`). Canopy is a derived
 image — it extracts the Yggdrasil tarball as its base, purges the
 init-family, and re-packages. If the tarball is missing the build
@@ -279,7 +279,7 @@ it's a chroot purge, not a fresh debootstrap).
 
 `build-canopy.sh` produces up to three artifacts:
 
-- `build/canopy-<ver>.tar.xz` — rootfs tarball
+- `build/canopy-<ver>.txz` — rootfs tarball (xz-compressed)
 - `build/canopy-<ver>.qcow2` — partition-less ext4 disk image (same
   layout as Yggdrasil's qcow2; note that without a pid1 the qcow2 will
   not complete a normal boot — it is primarily useful for offline
@@ -288,12 +288,12 @@ it's a chroot purge, not a fresh debootstrap).
   `canopy:<ver>` and then `podman save --format=oci-archive`)
 
 Rootless podman import fails in kanibako (newuidmap limits); the build
-script treats that as a warning and continues with tar.xz + qcow2.
+script treats that as a warning and continues with .txz + qcow2.
 Published releases run in CI where rootless podman works.
 
 ## Artifact sizes (at v1.4.0)
 
-| Image     | tar.xz  | qcow2   | Packages |
+| Image     | .txz    | qcow2   | Packages |
 |-----------|---------|---------|----------|
 | Yggdrasil | 56 MB   | 87 MB   | 211      |
 | Canopy    | 46 MB   | 71 MB   | 182      |

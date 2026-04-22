@@ -21,22 +21,22 @@ Attached to the release page at `github.com/doctorjei/tenkei/releases/tag/v<ver>
 | `tenkei-initramfs.img`             | ~1.1 MB  | gzip+cpio initramfs (busybox + virtiofs-aware init script).          |
 | `yggdrasil-<ver>.txz`              |  ~57 MB  | Yggdrasil rootfs tarball (xz-compressed).                            |
 | `yggdrasil-<ver>.qcow2`            |  ~87 MB  | Bootable partition-less ext4 disk image for `qemu -drive`.           |
-| `yggdrasil-<ver>-oci.tar`          |  ~84 MB  | OCI archive of the Yggdrasil image (air-gapped `podman load`).       |
+| `yggdrasil-<ver>-oci.txz`          |  ~60 MB  | OCI archive of the Yggdrasil image (air-gapped `podman load`, xz-compressed). |
 | `bifrost-<ver>.txz`                |  ~57 MB  | Bifrost (SSH-ready) rootfs tarball.                                  |
 | `bifrost-<ver>.qcow2`              |  ~87 MB  | Bootable Bifrost disk image.                                         |
-| `bifrost-<ver>-oci.tar`            |  ~85 MB  | OCI archive of the Bifrost image.                                    |
+| `bifrost-<ver>-oci.txz`            |  ~60 MB  | OCI archive of the Bifrost image (xz-compressed).                    |
 | `canopy-<ver>.txz`                 |  ~46 MB  | Canopy (no-init) rootfs tarball. Not independently bootable.         |
 | `canopy-<ver>.qcow2`               |  ~71 MB  | Canopy disk image (composition base — no pid1).                      |
-| `canopy-<ver>-oci.tar`             |  ~68 MB  | OCI archive of the Canopy image.                                     |
-| `tenkei-kernel-<ver>-oci.tar`      |  ~8.4 MB | OCI archive of the kernel-only image (multi-stage `COPY --from=`).   |
+| `canopy-<ver>-oci.txz`             |  ~49 MB  | OCI archive of the Canopy image (xz-compressed).                     |
+| `tenkei-kernel-<ver>-oci.txz`      |  ~7 MB   | OCI archive of the kernel-only image (multi-stage `COPY --from=`, xz-compressed). |
 
-Rootfs archives are published as `.txz` on the release page as of
-v1.4.2 (same xz format, shorter canonical extension — was `.tar.xz`
-through v1.4.1). The build scripts still produce `.tar.xz` in
-`build/` locally; the rename is a release-page-only change. Full
-script-side `.tar.xz → .txz` rename and OCI attachment
-xz-compression are tracked in `~/playbook/tasks.md` "Do Eventually";
-GHCR push format (uncompressed OCI) does not change.
+Rootfs archives are published as `.txz` (same xz format, canonical
+shorter extension — `.tar.xz` through v1.4.1, renamed on the release
+page at v1.4.2, and renamed at the build-script layer thereafter).
+OCI-archive release attachments are xz-compressed on the release page
+as `-oci.txz` — GHCR push format (uncompressed OCI, served by the
+registry) is unchanged. `podman load` accepts the xz-compressed form
+natively.
 
 ### OCI images on GHCR
 

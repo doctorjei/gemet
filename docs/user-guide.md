@@ -250,8 +250,8 @@ commands, downstream pattern, and version compatibility notes.
 Tenkei publishes `yggdrasil:<ver>` — a minimal Debian 13 + systemd OCI
 image intended as the foundation for downstream rootfs builds (droste
 tiers, kento test fixtures, user-defined images). It ships in three
-artifact forms: OCI image, `.tar.xz` tarball (published as `.txz` on
-the release page), and qcow2 disk image.
+artifact forms: OCI image, `.txz` tarball (xz-compressed), and qcow2
+disk image.
 
 As of 1.2.0, the rootfs is ~210-230 MB (down from ~377 MB) thanks to a
 multi-phase shrink pass applied at build time: BusyBox swap for 18
@@ -305,7 +305,7 @@ staging path that `bifrost-sshkey-sync.service` merges into
 
 No pre-generated `/etc/ssh/ssh_host_*_key` files are baked into the
 published image — keys are always first-boot. Bifrost derives from
-`yggdrasil-<ver>.tar.xz` in ~30 s and ships the same three artifact
+`yggdrasil-<ver>.txz` in ~30 s and ships the same three artifact
 forms (tarball, qcow2, OCI). Size parity with Yggdrasil (~57 MB
 tarball / 87 MB qcow2).
 
@@ -330,7 +330,7 @@ The tagline is "no pid1, no udev daemon, no dbus daemon" — not
 and util-linux link against it. Those libraries are inert without
 their corresponding daemons running.
 
-Canopy derives from `yggdrasil-<ver>.tar.xz` in ~30 s, is ~10 MB
+Canopy derives from `yggdrasil-<ver>.txz` in ~30 s, is ~10 MB
 smaller than Yggdrasil under xz, and 29 packages lighter (211 →
 182). The motivating downstream consumer is `droste-seed`, which
 collapses to a pure Containerfile (`FROM canopy + useradd + sysctl`)

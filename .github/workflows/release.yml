@@ -292,30 +292,30 @@ jobs:
             || { echo "ERROR: build/tenkei-initramfs.img missing or empty"; exit 1; }
           echo "Kernel acquisition path: ${{ steps.kata-check.outputs.kata_ok == 'true' && 'Kata prebuilt fetch' || 'local compile fallback' }}"
 
-      - name: Build yggdrasil rootfs (tar.xz + qcow2 + OCI import)
+      - name: Build yggdrasil rootfs (.txz + qcow2 + OCI import)
         shell: bash
         run: |
           set -euo pipefail
           bash rootfs/build-yggdrasil.sh
           VERSION="${{ steps.ver.outputs.version }}"
-          ls -l "build/yggdrasil-${VERSION}.tar.xz" "build/yggdrasil-${VERSION}.qcow2"
+          ls -l "build/yggdrasil-${VERSION}.txz" "build/yggdrasil-${VERSION}.qcow2"
           podman image exists "localhost/yggdrasil:${VERSION}" \
             || { echo "ERROR: yggdrasil OCI image was not imported"; exit 1; }
 
-      - name: Build bifrost rootfs (tar.xz + qcow2 + OCI import)
+      - name: Build bifrost rootfs (.txz + qcow2 + OCI import)
         shell: bash
         run: |
           set -euo pipefail
           # Bifrost is a derived image (yggdrasil + opinionated SSH layer);
-          # runs in ~30 s since it just extracts the yggdrasil tar.xz,
+          # runs in ~30 s since it just extracts the yggdrasil .txz,
           # overlays a handful of files, and re-packages.
           bash rootfs/build-bifrost.sh
           VERSION="${{ steps.ver.outputs.version }}"
-          ls -l "build/bifrost-${VERSION}.tar.xz" "build/bifrost-${VERSION}.qcow2"
+          ls -l "build/bifrost-${VERSION}.txz" "build/bifrost-${VERSION}.qcow2"
           podman image exists "localhost/bifrost:${VERSION}" \
             || { echo "ERROR: bifrost OCI image was not imported"; exit 1; }
 
-      - name: Build canopy rootfs (tar.xz + qcow2 + OCI import)
+      - name: Build canopy rootfs (.txz + qcow2 + OCI import)
         shell: bash
         run: |
           set -euo pipefail
@@ -324,7 +324,7 @@ jobs:
           # residual unit dirs, re-packages.
           bash rootfs/build-canopy.sh
           VERSION="${{ steps.ver.outputs.version }}"
-          ls -l "build/canopy-${VERSION}.tar.xz" "build/canopy-${VERSION}.qcow2"
+          ls -l "build/canopy-${VERSION}.txz" "build/canopy-${VERSION}.qcow2"
           podman image exists "localhost/canopy:${VERSION}" \
             || { echo "ERROR: canopy OCI image was not imported"; exit 1; }
 
@@ -366,7 +366,7 @@ jobs:
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
           # Single invocation covers all three variants via auto-detection
-          # on <variant>-<ver>.tar.xz existence.
+          # on <variant>-<ver>.txz existence.
           bash scripts/ci-structural-tests.sh --build-dir=build/ --version="$VERSION"
 
       - name: Tier 2 — systemd-in-OCI tests (yggdrasil)
@@ -483,6 +483,36 @@ jobs:
           podman push "ghcr.io/doctorjei/tenkei/tenkei-kernel:${VERSION}"
           podman push "ghcr.io/doctorjei/tenkei/tenkei-kernel:latest"
 
+      - name: Compress OCI archives for release attachment (on tagged version)
+        if: steps.ver.outputs.is_tag_push == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          # xz-compress per-variant OCI archives for release-page upload
+          # only. GHCR push uses `podman tag`/`podman push` against the
+          # in-podman image (not the saved .tar), and the Tier 1/2 test
+          # steps consume the uncompressed `-oci.tar` directly, so we
+          # keep the `.tar` sources intact and emit a `.txz` sibling
+          # strictly as a release attachment. Matches the .txz rename
+          # shipped for the per-variant rootfs tarballs.
+          for a in \
+            "build/yggdrasil-${VERSION}-oci.tar" \
+            "build/bifrost-${VERSION}-oci.tar" \
+            "build/canopy-${VERSION}-oci.tar" \
+            "build/tenkei-kernel-${VERSION}-oci.tar"
+          do
+            [[ -f "$a" ]] || { echo "ERROR: missing $a"; exit 1; }
+            # -k keeps the original .tar in place for intra-workflow use.
+            # -T0 uses all available cores; -9 for maximum xz ratio.
+            xz -k -T0 -9 -c "$a" > "${a%.tar}.txz"
+          done
+          ls -l \
+            "build/yggdrasil-${VERSION}-oci.txz" \
+            "build/bifrost-${VERSION}-oci.txz" \
+            "build/canopy-${VERSION}-oci.txz" \
+            "build/tenkei-kernel-${VERSION}-oci.txz"
+
       - name: Create GitHub Release (on tagged version)
         if: steps.ver.outputs.is_tag_push == 'true'
         shell: bash
@@ -499,16 +529,16 @@ jobs:
           ASSETS=(
             "build/vmlinuz"
             "build/tenkei-initramfs.img"
-            "build/yggdrasil-${VERSION}.tar.xz"
+            "build/yggdrasil-${VERSION}.txz"
             "build/yggdrasil-${VERSION}.qcow2"
-            "build/yggdrasil-${VERSION}-oci.tar"
-            "build/bifrost-${VERSION}.tar.xz"
+            "build/yggdrasil-${VERSION}-oci.txz"
+            "build/bifrost-${VERSION}.txz"
             "build/bifrost-${VERSION}.qcow2"
-            "build/bifrost-${VERSION}-oci.tar"
-            "build/canopy-${VERSION}.tar.xz"
+            "build/bifrost-${VERSION}-oci.txz"
+            "build/canopy-${VERSION}.txz"
             "build/canopy-${VERSION}.qcow2"
-            "build/canopy-${VERSION}-oci.tar"
-            "build/tenkei-kernel-${VERSION}-oci.tar"
+            "build/canopy-${VERSION}-oci.txz"
+            "build/tenkei-kernel-${VERSION}-oci.txz"
           )
           for a in "${ASSETS[@]}"; do
             [[ -f "$a" ]] || { echo "ERROR: missing release asset: $a"; exit 1; }
@@ -573,13 +603,13 @@ jobs:
           ls -l \
             build/vmlinuz \
             build/tenkei-initramfs.img \
-            "build/yggdrasil-${VERSION}.tar.xz" \
+            "build/yggdrasil-${VERSION}.txz" \
             "build/yggdrasil-${VERSION}.qcow2" \
             "build/yggdrasil-${VERSION}-oci.tar" \
-            "build/bifrost-${VERSION}.tar.xz" \
+            "build/bifrost-${VERSION}.txz" \
             "build/bifrost-${VERSION}.qcow2" \
             "build/bifrost-${VERSION}-oci.tar" \
-            "build/canopy-${VERSION}.tar.xz" \
+            "build/canopy-${VERSION}.txz" \
             "build/canopy-${VERSION}.qcow2" \
             "build/canopy-${VERSION}-oci.tar" \
             "build/tenkei-kernel-${VERSION}-oci.tar"

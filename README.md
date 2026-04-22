@@ -50,9 +50,9 @@ images.
 | OCI      | `yggdrasil:<ver>`                     | minimal Debian 13 + systemd userland (~210-230 MB) — see [docs/yggdrasil.md](docs/yggdrasil.md) |
 | OCI      | `bifrost:<ver>`                       | Yggdrasil + opinionated SSH layer — see [docs/bifrost.md](docs/bifrost.md) |
 | OCI      | `canopy:<ver>`                        | Yggdrasil minus init-family (no-init base) — see [docs/canopy.md](docs/canopy.md) |
-| Tarball  | `build/yggdrasil-<ver>.tar.xz`        | Yggdrasil rootfs for `lxc-create` (published as `.txz` on the release page) |
-| Tarball  | `build/bifrost-<ver>.tar.xz`          | Bifrost rootfs (SSH-ready)              |
-| Tarball  | `build/canopy-<ver>.tar.xz`           | Canopy rootfs (no-init)                 |
+| Tarball  | `build/yggdrasil-<ver>.txz`           | Yggdrasil rootfs for `lxc-create` (xz-compressed; same on the release page) |
+| Tarball  | `build/bifrost-<ver>.txz`             | Bifrost rootfs (SSH-ready)              |
+| Tarball  | `build/canopy-<ver>.txz`              | Canopy rootfs (no-init)                 |
 | qcow2    | `build/yggdrasil-<ver>.qcow2`         | bootable disk image for `qemu -drive`   |
 | qcow2    | `build/bifrost-<ver>.qcow2`           | bootable disk image (SSH-ready)         |
 | qcow2    | `build/canopy-<ver>.qcow2`            | disk image (no-init; primarily for inspection) |
@@ -176,7 +176,7 @@ tenkei/
 +-- kernel/
 |   +-- Containerfile        # kernel-as-OCI image source
 +-- rootfs/
-|   +-- build-yggdrasil.sh        # Yggdrasil OCI + .tar.xz + qcow2 builder
+|   +-- build-yggdrasil.sh        # Yggdrasil OCI + .txz + qcow2 builder
 |   +-- build-bifrost.sh          # Bifrost derived-image builder (yggdrasil + SSH layer)
 |   +-- build-canopy.sh           # Canopy derived-image builder (yggdrasil minus init-family)
 |   +-- seed-target.txt           # package keep-list
@@ -224,9 +224,9 @@ Tagged releases (`v*`) are built automatically by
 - **GitHub Release attachments** at
   `github.com/doctorjei/tenkei/releases` — `vmlinuz`,
   `tenkei-initramfs.img`, `{yggdrasil,bifrost,canopy}-<ver>.{txz,qcow2}`
-  (rootfs tarballs published as `.txz` on the release page; build
-  scripts still emit `.tar.xz` locally until the script-side rename
-  ships), and OCI archives for all four images.
+  (rootfs tarballs are xz-compressed with the canonical `.txz`
+  extension; build scripts emit `.txz` locally too), and xz-compressed
+  OCI archives (`-oci.txz`) for all four images.
 - **OCI images on GHCR** —
   `ghcr.io/doctorjei/tenkei/{yggdrasil,bifrost,canopy,tenkei-kernel}:<ver>`
   (all also tagged `:latest`).
