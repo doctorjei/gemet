@@ -23,16 +23,24 @@
 #                            diag-init must NOT emit the marker (hang
 #                            expected). Skipped if no orig initramfs is
 #                            supplied.
+#   N   negative / failure-injection — tenkei's init must drop to the
+#                            emergency shell (with the "rootfs mount
+#                            failed ... Dropping to emergency shell"
+#                            marker) rather than hanging silently when
+#                            the rootfs is misconfigured.
+#     N1  virtiofs served, but cmdline root= points at a bogus tag
+#     N2  virtiofs served, but cmdline rootfstype=ext4 (fs mismatch)
+#     N3  qcow2 path, but no block device attached (root=/dev/vdz)
 #
 # Usage:
 #   ci-vm-boot-test.sh --build-dir=<dir> [--variant=yggdrasil|bifrost|all]
-#                      [--orig-initramfs=<path>] [--skip-tier=<A|B|C|D|R>]...
+#                      [--orig-initramfs=<path>] [--skip-tier=<A|B|C|D|R|N>]...
 #                      [--timeout=<sec>] [--keep-logs] [--ssh-port=<port>]
 #
 # Expected artifacts in <build-dir>:
 #   vmlinuz                        the tenkei kernel
 #   tenkei-initramfs.img           the patched initramfs
-#   <variant>-<ver>.tar.xz         rootfs tarball
+#   <variant>-<ver>.txz            rootfs tarball (xz-compressed tar)
 #   <variant>-<ver>.qcow2          rootfs disk image
 #   VERSION                        optional; otherwise inferred from filenames
 #
@@ -100,13 +108,13 @@ fi
 resolve_variant_files() {
     local var="$1" v="${VERSION:-}"
     if [[ -z "$v" ]]; then
-        # Infer from the tar.xz filename
+        # Infer from the .txz filename
         local f
-        f="$(ls "$BUILD_DIR"/"$var"-*.tar.xz 2>/dev/null | head -1)"
+        f="$(ls "$BUILD_DIR"/"$var"-*.txz 2>/dev/null | head -1)"
         [[ -n "$f" ]] || { echo ""; return 1; }
-        v="$(basename "$f" .tar.xz | sed "s/^$var-//")"
+        v="$(basename "$f" .txz | sed "s/^$var-//")"
     fi
-    echo "$BUILD_DIR/$var-$v.tar.xz|$BUILD_DIR/$var-$v.qcow2|$v"
+    echo "$BUILD_DIR/$var-$v.txz|$BUILD_DIR/$var-$v.qcow2|$v"
 }
 
 RESULTS_DIR="$BUILD_DIR/test-results"
@@ -143,18 +151,19 @@ tier_skipped() {
     [[ -n "${SKIP_TIER[$letter]:-}" ]]
 }
 
-# Extract tar.xz into a directory (for virtiofs serving). Idempotent.
+# Extract .txz (xz-compressed tar) into a directory (for virtiofs
+# serving). Idempotent.
 extract_rootfs() {
-    local tarxz="$1" dest="$2"
+    local txz="$1" dest="$2"
     if [[ -d "$dest" && -f "$dest/.extracted-from" ]] && \
-       [[ "$(cat "$dest/.extracted-from")" == "$tarxz" ]]; then
+       [[ "$(cat "$dest/.extracted-from")" == "$txz" ]]; then
         return 0
     fi
-    info "extracting $(basename "$tarxz") → $dest"
+    info "extracting $(basename "$txz") → $dest"
     rm -rf "$dest"
     mkdir -p "$dest"
-    tar -xf "$tarxz" -C "$dest"
-    echo "$tarxz" > "$dest/.extracted-from"
+    tar -xf "$txz" -C "$dest"
+    echo "$txz" > "$dest/.extracted-from"
 }
 
 # Inject a diagnostic init script into the rootfs dir.
@@ -627,29 +636,124 @@ tier_R_regression() {
     fi
 }
 
+# Tier N — failure-injection / negative path. tenkei's init must drop
+# to the emergency shell (emitting the "rootfs mount failed ... Dropping
+# to emergency shell" marker from initramfs/init) rather than hanging
+# silently when the rootfs is misconfigured. Three sub-tests share one
+# serving dir (reused from A1) since they don't care about rootfs
+# contents — only the mount dispatch.
+TIMEOUT_NEGATIVE=30
+tier_N_failure_injection() {
+    local variant="$1" txz="$2"
+    local serving="$RESULTS_DIR/${variant}-rootfs-diag"  # reuse A1 serving dir
+    extract_rootfs "$txz" "$serving"
+
+    # ── N1: wrong virtiofs tag ─────────────────────────────────
+    local label1="${variant}-N1"
+    local log1="$RESULTS_DIR/$label1.serial.log"
+    : > "$log1"
+    if start_virtiofsd "$serving" "$label1"; then
+        timeout "$TIMEOUT_NEGATIVE" sudo qemu-system-x86_64 \
+            "${QEMU_BASE[@]}" \
+            -kernel "$KERNEL" \
+            -initrd "$INITRAMFS" \
+            -append "console=ttyS0 rootfstype=virtiofs root=bogus_tag panic=5" \
+            -chardev "socket,id=vfs,path=$VFSD_SOCK" \
+            -device "vhost-user-fs-pci,chardev=vfs,tag=rootfs" \
+            -object "memory-backend-memfd,id=mem,size=1024M,share=on" \
+            -numa "node,memdev=mem" \
+            -netdev "user,id=net0" \
+            -device "virtio-net-pci,netdev=net0" \
+            -serial "file:$log1" \
+            </dev/null >"$RESULTS_DIR/$label1.qemu.stdout" 2>&1
+        stop_virtiofsd
+        local line1
+        line1="$(grep -oE "(tenkei: )?(rootfs mount failed|Dropping to emergency shell)[^\"]*" "$log1" | head -1)"
+        if grep -qE "rootfs mount failed|Dropping to emergency shell" "$log1"; then
+            record "N1" "PASS" "$variant: bogus virtiofs tag → emergency marker: ${line1}"
+        else
+            record "N1" "FAIL" "$variant: bogus virtiofs tag produced no emergency marker (hung silently?)"
+        fi
+    else
+        record "N1" "FAIL" "$variant: virtiofsd failed to start for N1"
+    fi
+
+    # ── N2: rootfstype mismatch (virtiofs served, cmdline says ext4) ──
+    local label2="${variant}-N2"
+    local log2="$RESULTS_DIR/$label2.serial.log"
+    : > "$log2"
+    if start_virtiofsd "$serving" "$label2"; then
+        timeout "$TIMEOUT_NEGATIVE" sudo qemu-system-x86_64 \
+            "${QEMU_BASE[@]}" \
+            -kernel "$KERNEL" \
+            -initrd "$INITRAMFS" \
+            -append "console=ttyS0 rootfstype=ext4 root=rootfs panic=5" \
+            -chardev "socket,id=vfs,path=$VFSD_SOCK" \
+            -device "vhost-user-fs-pci,chardev=vfs,tag=rootfs" \
+            -object "memory-backend-memfd,id=mem,size=1024M,share=on" \
+            -numa "node,memdev=mem" \
+            -netdev "user,id=net0" \
+            -device "virtio-net-pci,netdev=net0" \
+            -serial "file:$log2" \
+            </dev/null >"$RESULTS_DIR/$label2.qemu.stdout" 2>&1
+        stop_virtiofsd
+        local line2
+        line2="$(grep -oE "(tenkei: )?(rootfs mount failed|Dropping to emergency shell)[^\"]*" "$log2" | head -1)"
+        if grep -qE "rootfs mount failed|Dropping to emergency shell" "$log2"; then
+            record "N2" "PASS" "$variant: rootfstype mismatch → emergency marker: ${line2}"
+        else
+            record "N2" "FAIL" "$variant: rootfstype mismatch produced no emergency marker (hung silently?)"
+        fi
+    else
+        record "N2" "FAIL" "$variant: virtiofsd failed to start for N2"
+    fi
+
+    # ── N3: missing block device (qcow2 path, no -drive) ──────
+    local label3="${variant}-N3"
+    local log3="$RESULTS_DIR/$label3.serial.log"
+    : > "$log3"
+    timeout "$TIMEOUT_NEGATIVE" sudo qemu-system-x86_64 \
+        "${QEMU_BASE[@]}" \
+        -kernel "$KERNEL" \
+        -initrd "$INITRAMFS" \
+        -append "console=ttyS0 root=/dev/vdz rootfstype=ext4 panic=5" \
+        -netdev "user,id=net0" \
+        -device "virtio-net-pci,netdev=net0" \
+        -serial "file:$log3" \
+        </dev/null >"$RESULTS_DIR/$label3.qemu.stdout" 2>&1
+    local line3
+    line3="$(grep -oE "(tenkei: )?(rootfs mount failed|Dropping to emergency shell)[^\"]*" "$log3" | head -1)"
+    if grep -qE "rootfs mount failed|Dropping to emergency shell" "$log3"; then
+        record "N3" "PASS" "$variant: missing block device → emergency marker: ${line3}"
+    else
+        record "N3" "FAIL" "$variant: missing block device produced no emergency marker (hung silently?)"
+    fi
+}
+
 # ── Per-variant driver ────────────────────────────────────────────
 
 run_variant() {
     local variant="$1"
     info "── Variant: $variant ─────────────────────────────────"
-    local files tarxz qcow2 ver
+    local files txz qcow2 ver
     files="$(resolve_variant_files "$variant")" || { record "--" "SKIP" "$variant: artifacts not found"; return; }
-    tarxz="${files%%|*}"; rest="${files#*|}"
+    txz="${files%%|*}"; rest="${files#*|}"
     qcow2="${rest%%|*}";  ver="${rest#*|}"
-    [[ -f "$tarxz" ]] || { record "--" "SKIP" "$variant: tar.xz missing: $tarxz"; return; }
+    [[ -f "$txz" ]] || { record "--" "SKIP" "$variant: txz missing: $txz"; return; }
     [[ -f "$qcow2" ]] || warn "$variant: qcow2 missing; Tier A2/B2 will skip"
-    info "version $ver, tar.xz $(basename "$tarxz"), qcow2 $(basename "$qcow2")"
+    info "version $ver, txz $(basename "$txz"), qcow2 $(basename "$qcow2")"
 
-    tier_skipped A || tier_A1_virtiofs_diag "$variant" "$tarxz"
+    tier_skipped A || tier_A1_virtiofs_diag "$variant" "$txz"
     if [[ -f "$qcow2" ]]; then
         tier_skipped A || tier_A2_qcow2_diag "$variant" "$qcow2"
     fi
-    tier_skipped B || tier_B1_virtiofs_systemd "$variant" "$tarxz"
+    tier_skipped B || tier_B1_virtiofs_systemd "$variant" "$txz"
     if [[ -f "$qcow2" ]]; then
         tier_skipped B || tier_B2_qcow2_systemd "$variant" "$qcow2"
     fi
-    tier_skipped D || tier_D_bifrost_ssh "$variant" "$tarxz"
-    tier_skipped R || tier_R_regression "$variant" "$tarxz"
+    tier_skipped D || tier_D_bifrost_ssh "$variant" "$txz"
+    tier_skipped R || tier_R_regression "$variant" "$txz"
+    tier_skipped N || tier_N_failure_injection "$variant" "$txz"
 }
 
 # ── Main ──────────────────────────────────────────────────────────
