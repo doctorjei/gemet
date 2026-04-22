@@ -16,6 +16,10 @@
 #                                            qcow2 artifact form.
 #   (unset / anything else)               → defaults to virtiofs (tag=rootfs)
 #                                            for back-compat with kento.
+#   init=<path>                           → kernel-standard override for the
+#                                            program exec'd after switch_root
+#                                            (e.g. init=/bin/bash for rescue).
+#                                            Defaults to /sbin/init.
 #
 # On any mount failure, drops to an emergency /bin/sh.
 #
@@ -24,19 +28,25 @@ mount -t devtmpfs devtmpfs /dev
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 
-# Parse root= and rootfstype= from /proc/cmdline
+# Parse root=, rootfstype=, and init= from /proc/cmdline.
+# init= honors the kernel-standard override (e.g. init=/bin/bash for
+# rescue, init=/some-diag for bring-up probes). Silently ignoring it
+# would surprise downstream consumers that rely on it.
 ROOT=""
 ROOTFSTYPE=""
+INIT=""
 for arg in $(cat /proc/cmdline); do
 	case "$arg" in
 		root=*)       ROOT="${arg#root=}" ;;
 		rootfstype=*) ROOTFSTYPE="${arg#rootfstype=}" ;;
+		init=*)       INIT="${arg#init=}" ;;
 	esac
 done
 
 # Defaults preserve kento's current contract: virtiofs with tag=rootfs.
 [ -z "$ROOT" ]       && ROOT="rootfs"
 [ -z "$ROOTFSTYPE" ] && ROOTFSTYPE="virtiofs"
+[ -z "$INIT" ]       && INIT="/sbin/init"
 
 mkdir -p /newroot
 
@@ -62,5 +72,15 @@ if [ "$mount_ok" -ne 1 ]; then
 	exec /bin/sh
 fi
 
-echo "tenkei: mounted $ROOT as $ROOTFSTYPE; switching root."
-exec switch_root /newroot /sbin/init
+# Move initramfs-mounted pseudo-filesystems into the new root before
+# switch_root. Without this, /dev in the new root is empty and
+# init=/bin/bash (and, less reliably, systemd) deadlocks silently.
+mount --move /dev  /newroot/dev
+mount --move /proc /newroot/proc
+mount --move /sys  /newroot/sys
+
+echo "tenkei: mounted $ROOT as $ROOTFSTYPE; switching root to $INIT."
+
+# -c /dev/console reopens stdin/stdout/stderr on the new root's
+# /dev/console so kernel messages keep flowing after chroot.
+exec switch_root -c /dev/console /newroot "$INIT"
