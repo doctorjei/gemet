@@ -72,15 +72,29 @@ is a partition-less ext4 filesystem with no bootloader (the whole device
 kernel + initramfs boot it externally via `qemu -kernel … -initrd …
 -drive yggdrasil.qcow2 -append "root=/dev/vda rootfstype=ext4 …"`.
 
-On any mount failure, the init drops to `/bin/sh` (emergency shell) —
-this is an explicit marker on the console rather than a silent hang, so
-boot failures are diagnosable. (The switch_root hang pre-v1.4.2 was the
-exception that motivated the `mount --move` + `-c /dev/console` fix.)
+On boot-path failure, the init drops to `/bin/sh` (emergency shell) with
+diagnostic output on the console. Three failure paths are handled:
+
+- **rootfs mount failed** — the `root=` value or `rootfstype=` did not
+  produce a mountable filesystem. The console prints the values it tried
+  and hints at the likely cause (for virtiofs, the `tag=` mismatch is the
+  common one).
+- **`mount --move` failed** — the pseudo-fs move into the new root failed,
+  which would cause a silent init hang post-pivot if uncaught. The console
+  names which pseudo-fs failed and points at the likely cause (the target
+  directory is missing on the rootfs).
+- **`switch_root` exec failed** — `switch_root` returned rather than
+  exec'd the init, which almost always means the `init=` path is missing
+  or not executable inside the rootfs. The console prints the path it
+  tried. (This is the failure class that caused the pre-v1.4.2 hang.)
+
+Each of the three prints an actionable next step on-console and drops
+to `/bin/sh` — there is no silent hang on the tenkei boot path.
 
 **`init=` override.** Prior to v1.4.2, this argument was silently ignored
 (init was hardcoded to `/sbin/init`). Since v1.4.2, it honors the
-kernel-standard contract. Use this for rescue (`init=/bin/bash`) or
-bring-up diagnostics (`init=/some-diag-probe`).
+kernel-standard contract. Use this for rescue (`init=/bin/sh`,
+`init=/bin/bash`) or bring-up diagnostics (`init=/some-diag-probe`).
 
 To build:
 

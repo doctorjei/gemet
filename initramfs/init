@@ -68,6 +68,9 @@ esac
 
 if [ "$mount_ok" -ne 1 ]; then
 	echo "tenkei: rootfs mount failed (root=$ROOT fstype=$ROOTFSTYPE)."
+	echo "tenkei: check kernel cmdline root= and rootfstype= values."
+	echo "tenkei: for virtiofs, the tag must match the QEMU -device tag= arg."
+	echo "tenkei: for rescue, append init=/bin/sh to the kernel cmdline."
 	echo "Dropping to emergency shell."
 	exec /bin/sh
 fi
@@ -75,12 +78,30 @@ fi
 # Move initramfs-mounted pseudo-filesystems into the new root before
 # switch_root. Without this, /dev in the new root is empty and
 # init=/bin/bash (and, less reliably, systemd) deadlocks silently.
-mount --move /dev  /newroot/dev
-mount --move /proc /newroot/proc
-mount --move /sys  /newroot/sys
+move_failed=""
+mount --move /dev  /newroot/dev  || move_failed=/dev
+mount --move /proc /newroot/proc || move_failed=/proc
+mount --move /sys  /newroot/sys  || move_failed=/sys
+
+if [ -n "$move_failed" ]; then
+	echo "tenkei: mount --move $move_failed -> /newroot$move_failed failed."
+	echo "tenkei: pseudo-fs won't be populated in the new root; init would hang."
+	echo "tenkei: check that /newroot$move_failed exists on the rootfs."
+	echo "Dropping to emergency shell."
+	exec /bin/sh
+fi
 
 echo "tenkei: mounted $ROOT as $ROOTFSTYPE; switching root to $INIT."
 
 # -c /dev/console reopens stdin/stdout/stderr on the new root's
 # /dev/console so kernel messages keep flowing after chroot.
 exec switch_root -c /dev/console /newroot "$INIT"
+
+# switch_root is meant to exec $INIT and never return. If we got here, it
+# failed to exec — most often because $INIT is missing or not executable
+# inside the rootfs.
+echo "tenkei: switch_root failed (init=$INIT on /newroot)."
+echo "tenkei: check that $INIT exists and is executable inside the rootfs."
+echo "tenkei: for rescue, append init=/bin/sh to the kernel cmdline."
+echo "Dropping to emergency shell."
+exec /bin/sh
