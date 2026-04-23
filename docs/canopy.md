@@ -106,6 +106,9 @@ residual directories that dpkg leaves behind:
 /etc/init.d/               — SysV scripts from purged ssh/dbus
 /etc/rc?.d/                — 22 rc*.d symlinks from purged pkgs
 /usr/lib/systemd/          — unit files (see caveat below)
+/var/lib/systemd/          — deb-systemd-helper state; stale
+                             .dsh-also files would otherwise mislead
+                             downstream reinstalls into skipping enable
 /sbin/init                 — dangling symlink if present
 /etc/resolv.conf           — symlink inherited from Yggdrasil;
                              target never materializes without pid1

@@ -347,6 +347,13 @@ rm -rf "\$WORK_DIR/etc/rc0.d" "\$WORK_DIR/etc/rc1.d" "\$WORK_DIR/etc/rc2.d" \
 # installed), so dpkg's ownership DB will be inconsistent — accepted
 # trade-off since there's no pid1 to read these files anyway.
 rm -rf "\$WORK_DIR/usr/lib/systemd"
+# deb-systemd-helper state (.dsh-also tracking files) references enable
+# symlinks we just wiped under /etc|/usr/lib/systemd. Left behind, a
+# downstream reinstall of a pkg whose unit canopy purged sees a stale
+# .dsh-also, returns was-enabled=0, and takes the update-state branch
+# instead of re-enabling the unit. No pid1 here, so none of this state
+# is useful at runtime — wipe it with the rest of the systemd residue.
+rm -rf "\$WORK_DIR/var/lib/systemd"
 # Dangling init symlinks (owned by purged systemd-sysv / init packages).
 rm -f "\$WORK_DIR/sbin/init" "\$WORK_DIR/usr/sbin/init"
 # Drop the inherited resolv.conf symlink (target never materializes
