@@ -293,12 +293,15 @@ if $DO_IMPORT; then
             OCI_SAVED=true
             info "OCI archive size: $(du -h "$BIFROST_OCI" | awk '{print $1}')"
         else
-            warn "$CONTAINER_CMD save failed — skipping $BIFROST_OCI"
+            warn "$CONTAINER_CMD save failed (see stderr above) — skipping $BIFROST_OCI."
+            warn "Common causes: disk full at $(dirname "$BIFROST_OCI"), or $IMAGE_TAG missing from the image store."
         fi
     else
-        warn "$CONTAINER_CMD import failed (expected in kanibako due to"
-        warn "newuidmap limits on rootless podman). .txz + qcow2 are"
-        warn "still produced and are the primary artifacts."
+        warn "$CONTAINER_CMD import failed (see stderr above)."
+        warn "This is expected in container build environments with restricted"
+        warn "newuidmap, where rootless podman cannot complete import."
+        warn "Elsewhere, check the stderr above for the cause."
+        warn ".txz + qcow2 are still produced and are the primary artifacts."
     fi
 fi
 

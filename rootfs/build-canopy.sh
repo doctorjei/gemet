@@ -405,7 +405,10 @@ if $DO_IMPORT; then
         $CONTAINER_CMD image inspect "$IMAGE_TAG" --format '{{.Size}}' 2>/dev/null | \
             awk '{printf "Image size: %.0f MB\n", $1/1024/1024}' || true
     else
-        warn "OCI import failed — newuidmap limitations in kanibako are expected."
+        warn "$CONTAINER_CMD import failed (see stderr above)."
+        warn "This is expected in container build environments with restricted"
+        warn "newuidmap, where rootless podman cannot complete import."
+        warn "Elsewhere, check the stderr above for the cause."
         warn ".txz + qcow2 are still produced and are the primary artifacts."
     fi
 fi

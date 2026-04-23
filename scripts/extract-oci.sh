@@ -269,7 +269,7 @@ decompressor_for() {
                     echo "AUTO"
                     ;;
                 *)
-                    warn "layer mediaType '$media' / sniff '$sniff' unrecognized; trying tar -a"
+                    warn "layer mediaType '$media' / sniff '$sniff' unrecognized for blob $(basename "$blob"); trying tar -a as final fallback"
                     echo "AUTO"
                     ;;
             esac

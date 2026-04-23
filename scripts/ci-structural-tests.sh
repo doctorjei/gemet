@@ -411,7 +411,7 @@ else
     if [[ ! -f "$BIFROST_OCI" ]]; then
         # Not a hard fail locally; kanibako can't produce the OCI archive
         # (newuidmap limits). CI always produces it. We warn and skip.
-        warn "bifrost OCI archive not present (expected in CI; kanibako dev container skips OCI import)"
+        warn "bifrost OCI archive not present (expected when the build environment can't run rootless podman import)"
         echo "  skipped: $BIFROST_OCI"
     elif [[ ! -s "$BIFROST_OCI" ]]; then
         fail "bifrost OCI archive is zero-length: $BIFROST_OCI"
@@ -577,7 +577,7 @@ else
     # ─── Check 13: canopy-<ver>-oci.tar ───────────────────────────
     info "Check 13: canopy-${VERSION}-oci.tar"
     if [[ ! -f "$CANOPY_OCI" ]]; then
-        warn "canopy OCI archive not present (expected in CI; kanibako dev container skips OCI import)"
+        warn "canopy OCI archive not present (expected when the build environment can't run rootless podman import)"
         echo "  skipped: $CANOPY_OCI"
     elif [[ ! -s "$CANOPY_OCI" ]]; then
         fail "canopy OCI archive is zero-length: $CANOPY_OCI"

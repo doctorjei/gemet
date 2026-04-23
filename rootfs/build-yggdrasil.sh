@@ -156,12 +156,23 @@ done
 
 # ── Prerequisites ───────────────────────────────────────────────────
 for tool in fdisk debugfs tar curl sha512sum unshare; do
-    command -v "$tool" >/dev/null 2>&1 || error "missing required tool: $tool"
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        case "$tool" in
+            fdisk)     pkg=fdisk ;;
+            debugfs)   pkg=e2fsprogs ;;
+            tar)       pkg=tar ;;
+            curl)      pkg=curl ;;
+            sha512sum) pkg=coreutils ;;
+            unshare)   pkg=util-linux ;;
+            *)         pkg="?" ;;
+        esac
+        error "missing required tool: $tool (apt install $pkg)"
+    fi
 done
 
 if $DO_QCOW2; then
-    command -v qemu-img  >/dev/null 2>&1 || error "missing qemu-img"
-    command -v mkfs.ext4 >/dev/null 2>&1 || error "missing mkfs.ext4"
+    command -v qemu-img  >/dev/null 2>&1 || error "missing qemu-img (needed for --qcow2; apt install qemu-utils)"
+    command -v mkfs.ext4 >/dev/null 2>&1 || error "missing mkfs.ext4 (needed for --qcow2; apt install e2fsprogs)"
 fi
 
 [[ -f "$SEED_TARGET"   ]] || error "seed target list not found: $SEED_TARGET"
@@ -227,11 +238,15 @@ tar -xJf "$CACHED" -C "$SCRATCH"
 info "Parsing partition table..."
 FDISK_OUT=$(fdisk -l "$SCRATCH/disk.raw")
 ROOT_LINE=$(echo "$FDISK_OUT" | awk -v f="$SCRATCH/disk.raw" '$1==f"1"{print}')
-[[ -n "$ROOT_LINE" ]] || error "could not find root partition line"
+if [[ -z "$ROOT_LINE" ]]; then
+    echo "  fdisk output was:" >&2
+    echo "$FDISK_OUT" | sed 's/^/    /' >&2
+    error "could not find root partition (expected a row starting with '${SCRATCH}/disk.raw1')"
+fi
 ROOT_START_SEC=$(echo "$ROOT_LINE" | awk '{print $2}')
 ROOT_SECTORS=$(echo "$ROOT_LINE" | awk '{print $4}')
-[[ "$ROOT_START_SEC" =~ ^[0-9]+$ ]] || error "bad start sector"
-[[ "$ROOT_SECTORS" =~ ^[0-9]+$ ]]   || error "bad sector count"
+[[ "$ROOT_START_SEC" =~ ^[0-9]+$ ]] || error "bad start sector '$ROOT_START_SEC' from fdisk row: $ROOT_LINE"
+[[ "$ROOT_SECTORS" =~ ^[0-9]+$ ]]   || error "bad sector count '$ROOT_SECTORS' from fdisk row: $ROOT_LINE"
 info "Root partition: start=$ROOT_START_SEC sectors=$ROOT_SECTORS"
 
 ROOT_IMG="$SCRATCH/root.ext4"

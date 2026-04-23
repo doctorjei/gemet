@@ -158,9 +158,10 @@ The same flag family as `build-yggdrasil.sh`: `--no-import`, `--no-txz`,
 - `build/bifrost-<ver>-oci.tar` — OCI archive (imported as
   `bifrost:<ver>` and then `podman save --format=oci-archive`)
 
-Rootless podman import fails in kanibako (newuidmap limits); the build
-script treats that as a warning and continues with .txz + qcow2.
-Published releases run in CI where rootless podman works.
+In container build environments with restricted newuidmap, rootless
+podman import fails; the build script treats that as a warning and
+continues with .txz + qcow2. Published releases run in CI where
+rootless podman works.
 
 ## Downstream consumption
 

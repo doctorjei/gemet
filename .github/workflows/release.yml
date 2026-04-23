@@ -156,7 +156,7 @@ jobs:
             "$API")
           KATA_RELEASE=$(echo "$RELEASE_JSON" | jq -r .tag_name)
           [[ -n "$KATA_RELEASE" && "$KATA_RELEASE" != "null" ]] \
-            || { echo "ERROR: could not resolve Kata release tag"; exit 1; }
+            || { echo "ERROR: could not resolve Kata release tag. Check GH_TOKEN scope and api.github.com reachability. The workflow will fall back to local kernel compile."; exit 1; }
           # Kata's asset naming: historically .tar.xz with amd64|x86_64 suffix;
           # as of 3.28.0 it's .tar.zst (zstd) with amd64. Match both so we
           # don't break when Kata adjusts release packaging.
@@ -166,7 +166,7 @@ jobs:
                      | .browser_download_url' \
             | head -1)
           [[ -n "$URL" && "$URL" != "null" ]] \
-            || { echo "ERROR: no kata-static tarball asset found for $KATA_RELEASE"; exit 1; }
+            || { echo "ERROR: no kata-static tarball asset found for $KATA_RELEASE. Asset naming may have changed. The workflow will fall back to local kernel compile."; exit 1; }
           echo "Resolved Kata release: $KATA_RELEASE"
           echo "Asset URL: $URL"
           {
