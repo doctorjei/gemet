@@ -1,10 +1,19 @@
-# Tenkei User Guide
+# Gemet User Guide
 
 ## Overview
 
-Tenkei builds a minimal Linux kernel and initramfs purpose-built for booting
+Gemet builds a minimal Linux kernel and initramfs purpose-built for booting
 OCI container images as virtual machines. It replaces traditional VM disk images
 with a virtiofs-mounted rootfs served directly from the host's Podman layer store.
+
+Gemet is a subproject of [kento](https://github.com/doctorjei/kento) —
+kento owns VM lifecycle (process management, networking, virtiofsd
+supervision); Gemet provides the boot stack (kernel, initramfs, and
+the rootfs variants that systemd and SSH compose on top of).
+[droste](https://github.com/doctorjei/droste), the nested-virt test
+image builder, is also a kento subproject and consumes Gemet's Canopy
+base. Gemet releases independently; kento pulls its artifacts like any
+other downstream consumer.
 
 Pre-built artifacts (kernel, initramfs, Yggdrasil rootfs in multiple forms)
 are attached to every tagged release, and OCI images are published to GHCR.
@@ -16,7 +25,7 @@ The rest of this guide walks through building from source.
 
 ### Kernel
 
-Tenkei uses the Kata Containers kernel configuration as a starting point — a
+Gemet uses the Kata Containers kernel configuration as a starting point — a
 minimal kernel with just enough enabled for a guest VM:
 
 - virtio drivers (PCI, net, console, block, SCSI)
@@ -49,7 +58,7 @@ Requirements: build-essential, flex, bison, bc, libelf-dev, libssl-dev, busybox-
 
 ### Initramfs
 
-Tenkei replaces Kata's agent-based initramfs with a minimal one that:
+Gemet replaces Kata's agent-based initramfs with a minimal one that:
 
 1. Mounts the rootfs — virtiofs share or block device, selected by kernel cmdline
 2. `mount --move`s `/dev /proc /sys` into the new root (so they survive the pivot)
@@ -68,7 +77,7 @@ The init script parses `root=`, `rootfstype=`, and `init=` from
 
 The block-device branch supports Yggdrasil's qcow2 artifact form: the disk
 is a partition-less ext4 filesystem with no bootloader (the whole device
-*is* the root filesystem — no partition table, no `/dev/vda1`); tenkei's
+*is* the root filesystem — no partition table, no `/dev/vda1`); Gemet's
 kernel + initramfs boot it externally via `qemu -kernel … -initrd …
 -drive yggdrasil.qcow2 -append "root=/dev/vda rootfstype=ext4 …"`.
 
@@ -89,7 +98,7 @@ diagnostic output on the console. Three failure paths are handled:
   tried. (This is the failure class that caused the pre-v1.4.2 hang.)
 
 Each of the three prints an actionable next step on-console and drops
-to `/bin/sh` — there is no silent hang on the tenkei boot path.
+to `/bin/sh` — there is no silent hang on the Gemet boot path.
 
 **`init=` override.** Prior to v1.4.2, this argument was silently ignored
 (init was hardcoded to `/sbin/init`). Since v1.4.2, it honors the
@@ -173,14 +182,14 @@ qemu-system-x86_64 \
 
 ### Integration with kento
 
-Kento provides full VM lifecycle management using tenkei's kernel and initramfs.
+Kento provides full VM lifecycle management using Gemet's kernel and initramfs.
 The OCI image must include `/boot/vmlinuz` and `/boot/initramfs.img` (typically
 added by a [droste](https://github.com/doctorjei/droste) image layer, where droste
 is the project's nested-virt VM image builder — or via a two-line compose
 against `ghcr.io/doctorjei/gemet/boot:<ver>`, see below).
 
-**Quick compose against tenkei's GHCR images.** The simplest path is to
-stack the kernel image onto one of tenkei's rootfs images:
+**Quick compose against Gemet's GHCR images.** The simplest path is to
+stack the kernel image onto one of Gemet's rootfs images:
 
 ```dockerfile
 FROM ghcr.io/doctorjei/gemet/boot:1.5.1 AS kernel
@@ -217,10 +226,10 @@ See the [kento VM mode docs](https://github.com/doctorjei/kento) for full detail
 
 ### Building VM-bootable OCI images
 
-Kento expects the OCI image to contain tenkei's kernel and initramfs at
+Kento expects the OCI image to contain Gemet's kernel and initramfs at
 `/boot/vmlinuz` and `/boot/initramfs.img`. The
 [droste](https://github.com/doctorjei/droste) project builds these images
-using Containerfiles that copy tenkei's build output into the image and
+using Containerfiles that copy Gemet's build output into the image and
 configure the rootfs for VM boot.
 
 A minimal VM-bootable Containerfile looks like:
@@ -228,7 +237,7 @@ A minimal VM-bootable Containerfile looks like:
 ```dockerfile
 FROM debian:bookworm
 
-# Install tenkei kernel + initramfs
+# Install Gemet kernel + initramfs
 COPY vmlinuz /boot/vmlinuz
 COPY initramfs.img /boot/initramfs.img
 
@@ -251,7 +260,7 @@ Key requirements for a VM-bootable image:
 
 ## Kernel as OCI image
 
-Tenkei also publishes its kernel + initramfs as a single-layer OCI image
+Gemet also publishes its kernel + initramfs as a single-layer OCI image
 (`ghcr.io/doctorjei/gemet/boot:<ver>`, built locally as
 `localhost/gemet-kernel:<ver>`), a companion to the raw `build/` outputs.
 Downstream VM images consume it via multi-stage `COPY --from=` instead of
@@ -262,7 +271,7 @@ commands, downstream pattern, and version compatibility notes.
 
 ## Yggdrasil (minimal Debian base)
 
-Tenkei publishes `yggdrasil:<ver>` — a minimal Debian 13 + systemd OCI
+Gemet publishes `yggdrasil:<ver>` — a minimal Debian 13 + systemd OCI
 image intended as the foundation for downstream rootfs builds (droste
 tiers, kento test fixtures, user-defined images). It ships in three
 artifact forms: OCI image, `.txz` tarball (xz-compressed), and qcow2
@@ -310,7 +319,7 @@ pattern.
 
 ## Bifrost (SSH-ready variant)
 
-Tenkei publishes `bifrost:<ver>` — Yggdrasil plus an opinionated SSH
+Gemet publishes `bifrost:<ver>` — Yggdrasil plus an opinionated SSH
 layer for humans and ad-hoc testing. Bifrost re-enables
 `ssh.service`, generates host keys at first boot via
 `bifrost-hostkeys.service` (oneshot `ssh-keygen -A`,
@@ -332,7 +341,7 @@ policy rationale, staging-path semantics, and key-rotation notes.
 
 ## Canopy (no-init variant)
 
-Tenkei publishes `canopy:<ver>` — Yggdrasil minus the init-family
+Gemet publishes `canopy:<ver>` — Yggdrasil minus the init-family
 (pid1, udev daemon, dbus daemon, init meta-packages). Canopy is
 designed as an OCI base for no-init process containers: consumers
 bring their own pid1 (tini, dumb-init, s6-overlay) or run as bare
@@ -366,7 +375,7 @@ downstream consumption patterns.
 
 ### Fragment system
 
-Rather than maintaining monolithic `.config` files, tenkei uses the upstream
+Rather than maintaining monolithic `.config` files, Gemet uses the upstream
 Kata fragment system. Each feature area has its own config snippet:
 
 | Fragment | Purpose |
@@ -413,7 +422,7 @@ To add or remove kernel features:
 ## DAX (Direct Access)
 
 virtiofs supports DAX for memory-mapped file access, which bypasses the FUSE
-request/response overhead. The tenkei kernel includes DAX support
+request/response overhead. The Gemet kernel includes DAX support
 (`CONFIG_FUSE_DAX=y`), and the initramfs mounts with `dax=inode` (per-inode
 DAX, with graceful fallback when no DAX window is configured).
 

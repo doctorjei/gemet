@@ -1,6 +1,6 @@
 # Bifrost
 
-Bifrost is tenkei's SSH-ready companion image, built directly on top of
+Bifrost is Gemet's SSH-ready companion image, built directly on top of
 Yggdrasil. Where Yggdrasil is a pure foundation (no SSH host keys, sshd
 disabled, no authorized_keys machinery), Bifrost re-adds an opinionated
 SSH layer suitable for humans and ad-hoc testing — generated host keys
@@ -42,7 +42,6 @@ boot by `bifrost-hostkeys.service`:
 Description=Generate SSH host keys if missing
 Before=ssh.service ssh.socket
 After=local-fs.target
-ConditionPathExists=/usr/bin/ssh-keygen
 
 [Service]
 Type=oneshot
@@ -174,7 +173,7 @@ orchestration plane, etc.), build `FROM yggdrasil:<ver>` and install
 your own variant. Bifrost is an opinionated layer by design — it is
 not a base for further SSH-policy customization.
 
-For tenkei's companion projects:
+For Gemet's companion projects:
 
 - **droste** — builds `FROM yggdrasil:<ver>`, not Bifrost. Tiers own
   their own user model.
@@ -184,4 +183,4 @@ For tenkei's companion projects:
 
 ---
 
-*Last updated: 2026-04-20 (tenkei 1.2.0, bifrost Phase 2)*
+*Last updated: 2026-04-24 (Gemet 1.5.1 — namespace switch, bifrost-hostkeys Condition removal)*

@@ -1,6 +1,6 @@
 # Gemet
 
-**Boot any OCI container image as a real VM — kernel and initramfs included, no disk image conversion.**
+**Boot OCI container images as real VMs — no disk images, no agent inside the guest.**
 
 Gemet is the missing link between OCI images and lightweight VMs: a
 stripped-down Linux kernel and initramfs that boots into a container
@@ -8,6 +8,13 @@ rootfs served over virtiofs from the host. No disk images, no image
 conversion, no agent inside the guest — the same Podman layer store
 that [kento](https://github.com/doctorjei/kento) uses for LXC
 containers can also back full virtual machines.
+
+Gemet is a subproject of [kento](https://github.com/doctorjei/kento)
+— kento owns VM lifecycle; Gemet provides the boot stack.
+[droste](https://github.com/doctorjei/droste), which ships
+nested-virtualization test images built on Gemet's Canopy base, is
+also a kento subproject. Gemet releases independently; kento pulls
+its artifacts the same way any other consumer does.
 
 ## Quick Start
 
@@ -272,8 +279,8 @@ Tagged releases (`v*`) are built automatically by
 - **OCI images on GHCR** —
   `ghcr.io/doctorjei/gemet/{yggdrasil,bifrost,canopy,boot}:<ver>`
   (all also tagged `:latest`). The kernel image publishes as `boot`;
-  earlier versions (≤ 1.5.0) lived at
-  `ghcr.io/doctorjei/gemet/{yggdrasil,bifrost,canopy,gemet-boot}`
+  versions ≤ 1.5.0 were published under the old Tenkei namespace at
+  `ghcr.io/doctorjei/tenkei/{yggdrasil,bifrost,canopy,tenkei-kernel}`
   and remain pullable at their original tags.
 
 Consumers can `podman pull` the GHCR images or download the tarball/qcow2
@@ -294,9 +301,9 @@ See `bash scripts/git-upstream.sh --help` for all commands.
 
 ## Related Projects
 
-- [kento](https://github.com/doctorjei/kento) -- OCI images as LXC containers and VMs (manages Gemet VM lifecycle)
-- [droste](https://github.com/doctorjei/droste) -- Nested-virtualization VM images for infrastructure testing
-- [Kata Containers](https://github.com/kata-containers/kata-containers) -- Secure container runtime using lightweight VMs (upstream source for kernel configs)
+- [kento](https://github.com/doctorjei/kento) -- parent project. OCI images as LXC containers and VMs; owns Gemet VM lifecycle management.
+- [droste](https://github.com/doctorjei/droste) -- sibling kento subproject. Nested-virtualization VM images for infrastructure testing, built on Gemet's Canopy base.
+- [Kata Containers](https://github.com/kata-containers/kata-containers) -- secure container runtime using lightweight VMs; upstream source for Gemet's kernel configs.
 
 ## License
 

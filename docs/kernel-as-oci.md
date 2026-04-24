@@ -1,6 +1,6 @@
 # Kernel as OCI
 
-The kernel image is a single-layer OCI image containing tenkei's
+The kernel image is a single-layer OCI image containing Gemet's
 prebuilt kernel and initramfs. Published to GHCR as
 `ghcr.io/doctorjei/gemet/boot:<version>`; built locally as
 `localhost/gemet-kernel:<version>`. It is a companion artifact to the
@@ -19,13 +19,13 @@ Nothing else — no shell, no libc, no metadata beyond what `FROM scratch`
 implies. The image is only useful as a source in a multi-stage build; you
 cannot run it, exec into it, or use it as a rootfs.
 
-Purpose: let downstream consumers pull tenkei's kernel and initramfs via
-`COPY --from=<boot-image>` rather than having tenkei's source tree or
+Purpose: let downstream consumers pull Gemet's kernel and initramfs via
+`COPY --from=<boot-image>` rather than having Gemet's source tree or
 build output staged on disk next to their Containerfile.
 
 ## Pulling from GHCR
 
-As of tenkei 1.5.1, tagged releases are published to
+As of Gemet 1.5.1, tagged releases are published to
 `ghcr.io/doctorjei/gemet/boot:<ver>` (and `:latest`):
 
 ```bash
@@ -93,32 +93,32 @@ For consumers building locally against an unpublished version,
 
 ## Version compatibility
 
-The boot image uses tenkei's own `VERSION` as its tag. The kernel
+The boot image uses Gemet's own `VERSION` as its tag. The kernel
 and initramfs inside are whatever was in `build/` at the time the image
-was packaged, so tenkei's version reflects the project release, not the
+was packaged, so Gemet's version reflects the project release, not the
 Linux kernel version.
 
 Downstream consumers that need a specific kernel version should pin on
-tenkei's `VERSION` — this pins the kernel version that tenkei's build
+Gemet's `VERSION` — this pins the kernel version that Gemet's build
 scripts are wired up against for that release.
 
 ## Interchangeability with Kata kernels
 
-Tenkei does not patch or specialize the kernel. `scripts/build-kernel.sh`
+Gemet does not patch or specialize the kernel. `scripts/build-kernel.sh`
 is a thin wrapper around upstream Kata's builder that uses Kata's stock
 config fragments unmodified. The resulting `vmlinuz` is functionally
 equivalent to any Kata Containers kernel built for the same version with
 the same fragment set.
 
 Practical consequence: if you have a Kata kernel binary on hand (from a
-kata-containers release, an OCI image they publish, or a previous tenkei
+kata-containers release, an OCI image they publish, or a previous Gemet
 build), you can drop it in at `build/vmlinuz` and skip the local kernel
 compile entirely. The required configs — `CONFIG_VIRTIO_FS`,
 `CONFIG_FUSE_DAX`, `CONFIG_VIRTIO_BLK`, `CONFIG_EXT4_FS`, plus the rest
 of Kata's `common/` fragment — are already on by default in any Kata
 build, so no per-fragment auditing is needed.
 
-This also means tenkei's kernel is not a long-lived artifact in any
+This also means Gemet's kernel is not a long-lived artifact in any
 meaningful sense — bumping to a newer Kata kernel version is the same
 operation as building one for the first time.
 
@@ -148,4 +148,4 @@ COPY --from=kernel /boot/initramfs.img /boot/initramfs.img
 
 ---
 
-*Last updated: 2026-04-19 (tenkei 1.2.0 + release automation)*
+*Last updated: 2026-04-24 (Gemet 1.5.1 — namespace switch + kernel package rename to `boot`)*

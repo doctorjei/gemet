@@ -1,6 +1,6 @@
 # Canopy
 
-Canopy is tenkei's no-init companion image, built directly on top of
+Canopy is Gemet's no-init companion image, built directly on top of
 Yggdrasil. Where Yggdrasil is a full systemd foundation (pid1, udev and
 dbus daemons, init meta-packages wired up) and Bifrost adds an
 opinionated SSH layer on top, Canopy goes the other direction: it
@@ -319,4 +319,4 @@ of Canopy is shape, not size.
 
 ---
 
-*Last updated: 2026-04-21 (tenkei 1.4.1; GNU-tool rehydration section added from droste reference consumer)*
+*Last updated: 2026-04-24 (Gemet 1.5.1 — namespace switch; `.dsh-also` leak closed via `/var/lib/systemd` wipe in post-purge cleanup)*

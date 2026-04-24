@@ -1,8 +1,8 @@
 # PVE Integration Spec: VM Mode (qemu-server)
 
 This document specifies what kento needs to generate for
-`/etc/pve/qemu-server/<vmid>.conf` when creating a tenkei-backed VM.
-PVE config generation is a kento responsibility -- tenkei only provides
+`/etc/pve/qemu-server/<vmid>.conf` when creating a Gemet-backed VM.
+PVE config generation is a kento responsibility -- Gemet only provides
 the kernel, initramfs, and the QEMU parameter requirements documented here.
 
 Kento already generates `/etc/pve/lxc/<ctid>.conf` for containers.
@@ -10,7 +10,7 @@ The VM equivalent should follow the same pattern.
 
 ## Required QEMU Parameters
 
-A tenkei VM needs these QEMU flags (from `scripts/test-boot.sh`):
+A Gemet VM needs these QEMU flags (from `scripts/test-boot.sh`):
 
 ```
 -kernel <path-to-vmlinuz>

@@ -1,6 +1,6 @@
 # Yggdrasil
 
-Yggdrasil is tenkei's minimal Debian 13 + systemd foundation image. It serves
+Yggdrasil is Gemet's minimal Debian 13 + systemd foundation image. It serves
 as the base layer for downstream rootfs builds (droste tiers, kento test
 fixtures, user-defined images) and is published in three artifact forms: OCI
 image, `.txz` tarball (xz-compressed), and qcow2 disk image.
@@ -29,7 +29,7 @@ A stripped-down Debian 13 genericcloud rootfs with:
   (the `locales` package itself is purged after generation)
 
 Kernel and bootloader packages are purged: Yggdrasil boots via an external
-kernel + initramfs (tenkei's own — see [kernel-as-oci](kernel-as-oci.md))
+kernel + initramfs (Gemet's own — see [kernel-as-oci](kernel-as-oci.md))
 rather than a self-contained boot stack.
 
 ## Shrink phases
@@ -216,7 +216,7 @@ sudo bash rootfs/build-yggdrasil.sh           # OCI + .txz + qcow2 (default)
 
 `build-yggdrasil.sh` produces all three artifacts by default:
 
-- OCI image `yggdrasil:<version>` (version from tenkei's `VERSION` file)
+- OCI image `yggdrasil:<version>` (version from Gemet's `VERSION` file)
 - `build/yggdrasil-<version>.txz`
 - `build/yggdrasil-<version>.qcow2`
 
@@ -274,16 +274,16 @@ full Yggdrasil build.
 
 ### virtiofs boot (OCI artifact, droste tiers)
 
-Droste tiers layer on top of `yggdrasil:<ver>` and add tenkei's kernel +
+Droste tiers layer on top of `yggdrasil:<ver>` and add Gemet's kernel +
 initramfs via [kernel-as-oci](kernel-as-oci.md). The resulting image is
-booted by kento over virtiofs, following tenkei's default contract:
+booted by kento over virtiofs, following Gemet's default contract:
 
 ```
 root=rootfs rootfstype=virtiofs
 ```
 
-This is the existing kento/tenkei boot path — no change from previous
-tenkei releases.
+This is the existing kento/Gemet boot path — no change from previous
+Gemet releases.
 
 ### qcow2 boot contract (disk-image artifact)
 
@@ -295,7 +295,7 @@ table, no bootloader, no `/boot`. That means the guest sees the rootfs at
 root=/dev/vda rootfstype=ext4
 ```
 
-tenkei's initramfs dispatches on those cmdline args and mounts the block
+Gemet's initramfs dispatches on those cmdline args and mounts the block
 device directly (see `initramfs/init`). The corresponding boot invocation
 is:
 
@@ -330,7 +330,7 @@ Containerfile (or equivalent):
 ## Downstream consumption
 
 Yggdrasil is designed to be the base for downstream Containerfile
-layering. The canonical pattern combines Yggdrasil with tenkei's
+layering. The canonical pattern combines Yggdrasil with Gemet's
 [kernel-as-oci](kernel-as-oci.md) image to produce a self-contained
 VM-bootable image in a single Containerfile:
 
@@ -358,7 +358,7 @@ fully rehydrate the image, use `yggdrasil-unshim` or
 `yggdrasil-rehydrate` (see [Recovery tooling](#recovery-tooling)) from
 a `RUN` step in the tier's Containerfile.
 
-### Downstream images in tenkei
+### Downstream images in Gemet
 
 **Bifrost** is the first-party SSH-ready companion image: Yggdrasil plus
 an opinionated SSH layer (sshd enabled, host keys generated at first
@@ -397,10 +397,10 @@ it), and hands off to `scripts/test-boot.sh` for the virtiofsd + QEMU
 heavy lifting. Extra flags after `--` are forwarded (e.g. `-- --dax`,
 `-- --no-kvm`).
 
-The disk test boots the qcow2 artifact directly via QEMU with tenkei's
+The disk test boots the qcow2 artifact directly via QEMU with Gemet's
 kernel + initramfs — no virtiofsd. Default SSH forward is `localhost:2223`
 (different from the VM test's 2222 so both can run concurrently).
 
 ---
 
-*Last updated: 2026-04-19 (tenkei 1.2.0, Yggdrasil rootfs-shrink)*
+*Last updated: 2026-04-24 (Gemet 1.5.1 — namespace switch)*

@@ -1,9 +1,12 @@
 # Releases
 
-Tenkei publishes releases automatically from tagged commits. Artifacts land
-in two forms: **GitHub Release attachments** (raw files, for direct download
-and manual consumption) and **OCI images on GHCR** (for `podman pull` and
-multi-stage container builds).
+Gemet publishes releases automatically from tagged commits. Artifacts
+land in two forms: **GitHub Release attachments** (raw files, for direct
+download and manual consumption) and **OCI images on GHCR** (for
+`podman pull` and multi-stage container builds). Gemet releases
+independently from its parent project
+[kento](https://github.com/doctorjei/kento); kento pulls Gemet
+artifacts like any other downstream consumer.
 
 Releases are cut from tags matching `v*` (e.g. `v1.2.0`) — pushing such a tag
 triggers `.github/workflows/release.yml`, which builds every artifact form,
@@ -77,9 +80,10 @@ into their own rootfs image. See
 
 ### Kento composition pattern
 
-Kento (OCI-to-LXC/VM runner) expects a **single composed image** with
-both rootfs and `/boot/{vmlinuz,initramfs.img}` present. Compose the
-two tenkei images with a two-line Containerfile:
+Kento (Gemet's parent project — OCI-to-LXC/VM runner) expects a
+**single composed image** with both rootfs and
+`/boot/{vmlinuz,initramfs.img}` present. Compose the two Gemet images
+with a two-line Containerfile:
 
 ```dockerfile
 FROM ghcr.io/doctorjei/gemet/boot:1.5.1 AS kernel
