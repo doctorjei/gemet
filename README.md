@@ -1,8 +1,8 @@
-# Tenkei
+# Gemet
 
 **Boot any OCI container image as a real VM — kernel and initramfs included, no disk image conversion.**
 
-Tenkei is the missing link between OCI images and lightweight VMs: a
+Gemet is the missing link between OCI images and lightweight VMs: a
 stripped-down Linux kernel and initramfs that boots into a container
 rootfs served over virtiofs from the host. No disk images, no image
 conversion, no agent inside the guest — the same Podman layer store
@@ -37,7 +37,7 @@ sudo bash scripts/test-boot.sh \
 ssh -p 2222 root@127.0.0.1
 ```
 
-To consume tenkei as OCI images in a multi-stage build (the pattern
+To consume Gemet as OCI images in a multi-stage build (the pattern
 [kento](https://github.com/doctorjei/kento) uses):
 
 ```dockerfile
@@ -55,23 +55,23 @@ usage patterns beyond the SSH happy path.
 
 ```
 Host                              VM
-+-----------------+    +---------------------+
-| Podman layer    |    | tenkei kernel       |
-| store           |    |   + initramfs       |
-|   |             |    |     |               |
-|   v             |    |     v               |
-| virtiofsd -----------------> virtiofs mount |
-| (shares rootfs) |    |     |               |
-|                 |    |     v               |
-|                 |    |   switch_root       |
-|                 |    |     |               |
-|                 |    |     v               |
-|                 |    |   /sbin/init        |
-+-----------------+    +---------------------+
++-----------------+    +--------------------+
+|  Podman/Docker  |    |     gemet-boot     |
+|   layer store   |    | (kernel+initramfs) |
+|        |        |    |         |          |
+|        v        |    |         v          |
+|    virtiofsd ----------> virtiofs mount   |
+| (shares rootfs) |    |         |          |
+|                 |    |         v          |
+|                 |    |    switch_root     |
+|                 |    |         |          |
+|                 |    |         v          |
+|                 |    |     /sbin/init     |
++-----------------+    +--------------------+
 ```
 
 1. **Host** runs `virtiofsd`, sharing the OCI rootfs (composed from Podman layers)
-2. **QEMU/KVM** boots the tenkei kernel with the initramfs
+2. **QEMU/KVM** boots the Gemet kernel with the initramfs
 3. **Initramfs** mounts the virtiofs share as the root filesystem
 4. **`switch_root`** pivots into the container rootfs and execs `/sbin/init`
 
@@ -80,7 +80,7 @@ from the host -- no disk image to create, convert, or resize.
 
 ## Artifacts
 
-Tenkei produces two families of outputs. The raw files under `build/` are
+Gemet produces two families of outputs. The raw files under `build/` are
 the primary artifact; the OCI / tarball / qcow2 forms are additive, for
 consumers that want referenceable artifact URLs or self-contained disk
 images.
@@ -123,7 +123,7 @@ for the full contracts.
 
 ## Relationship to Kata Containers
 
-Tenkei borrows kernel configs and build tooling from
+Gemet borrows its kernel configs and build tooling from
 [Kata Containers](https://github.com/kata-containers/kata-containers), but the
 two projects solve different problems:
 
@@ -132,25 +132,25 @@ two projects solve different problems:
 - Runs a Go agent (`kata-agent`) inside the VM that receives gRPC commands
 - The VM is a sandbox for OCI containers -- the host orchestrates everything
 
-**What tenkei does:**
+**What Gemet does:**
 - No runtime, no agent, no containerd dependency
 - The initramfs is a short shell script: mount virtiofs, switch_root, done
 - The VM boots directly into the OCI image's own init -- it IS the machine
 - Lifecycle management is handled by [kento](https://github.com/doctorjei/kento)
 
-**What tenkei takes from Kata:**
+**What Gemet takes from Kata:**
 - Kernel config fragments (virtio, virtiofs, networking, cgroups, etc.)
 - Kernel patches for various versions
 - The kernel build script (wrapped for standalone use)
 
-**What tenkei replaces:**
+**What Gemet replaces:**
 - `kata-agent` -- replaced by a minimal shell init script
 - `kata-runtime` -- replaced by kento's VM management
 - containerd shim -- not needed; kento talks to QEMU directly
 
-**Kernel interchangeability:** tenkei does not patch or specialize the
+**Kernel interchangeability:** Gemet does not patch or specialize the
 kernel. `scripts/build-kernel.sh` is a thin wrapper around upstream Kata's
-builder using Kata's stock config fragments unmodified, so a tenkei
+builder using Kata's stock config fragments unmodified, so a Gemet
 `vmlinuz` is functionally equivalent to any Kata Containers kernel built
 for the same version. If you have a Kata kernel binary on hand (release
 artifact, OCI image, or prior build), you can drop it in at
@@ -158,7 +158,7 @@ artifact, OCI image, or prior build), you can drop it in at
 
 The upstream Kata code lives in `upstream/` as git subtrees. Changes to these
 files are not committed — they are overwritten on the next upstream sync.
-Tenkei's own code wraps or overrides upstream behavior as needed. Local
+Gemet's own code wraps or overrides upstream behavior as needed. Local
 customization (e.g., kernel config fragments) is fine for personal builds.
 
 ## Build from Source
@@ -210,7 +210,7 @@ Run `bash scripts/test-boot.sh --help` for all options.
 ## Project Structure
 
 ```
-tenkei/
+gemet/
 +-- initramfs/
 |   +-- init                 # Minimal virtiofs / block-dev mount + switch_root
 |   +-- build.sh             # Packages initramfs (busybox + init)
@@ -273,7 +273,7 @@ Tagged releases (`v*`) are built automatically by
   `ghcr.io/doctorjei/gemet/{yggdrasil,bifrost,canopy,boot}:<ver>`
   (all also tagged `:latest`). The kernel image publishes as `boot`;
   earlier versions (≤ 1.5.0) lived at
-  `ghcr.io/doctorjei/tenkei/{yggdrasil,bifrost,canopy,tenkei-kernel}`
+  `ghcr.io/doctorjei/gemet/{yggdrasil,bifrost,canopy,gemet-boot}`
   and remain pullable at their original tags.
 
 Consumers can `podman pull` the GHCR images or download the tarball/qcow2
@@ -294,13 +294,13 @@ See `bash scripts/git-upstream.sh --help` for all commands.
 
 ## Related Projects
 
-- [kento](https://github.com/doctorjei/kento) -- OCI images as LXC containers and VMs (manages tenkei VM lifecycle)
+- [kento](https://github.com/doctorjei/kento) -- OCI images as LXC containers and VMs (manages Gemet VM lifecycle)
 - [droste](https://github.com/doctorjei/droste) -- Nested-virtualization VM images for infrastructure testing
 - [Kata Containers](https://github.com/kata-containers/kata-containers) -- Secure container runtime using lightweight VMs (upstream source for kernel configs)
 
 ## License
 
-Tenkei's own code is licensed under the GNU General Public License v3.0.
+Gemet's own code is licensed under the GNU General Public License v3.0.
 See [LICENSE.md](LICENSE.md) for the full text.
 
 Upstream code in `upstream/` is from Kata Containers, licensed under Apache 2.0.
