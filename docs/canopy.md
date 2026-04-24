@@ -217,7 +217,7 @@ install — dpkg ordering inside a single transaction does not
 guarantee coreutils configures first.
 
 ```dockerfile
-FROM ghcr.io/doctorjei/tenkei/canopy:1.4.0
+FROM ghcr.io/doctorjei/gemet/canopy:1.5.1
 
 # 1. Strip every busybox-shadow diversion. Leaves non-busybox diversions
 #    (e.g., .usr-is-merged compat) untouched.

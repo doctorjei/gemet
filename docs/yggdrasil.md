@@ -243,9 +243,11 @@ same rootfs work directory in a single build invocation:
 | `.txz`      | `build/yggdrasil-<ver>.txz`               | `lxc-create -t local --rootfs=<tarball>` |
 | qcow2       | `build/yggdrasil-<ver>.qcow2`             | External boot via `qemu -kernel -initrd` |
 
-Tagged releases publish the OCI image to GHCR at
-`ghcr.io/doctorjei/tenkei/yggdrasil:<ver>` (and `:latest`), and the
-.txz + qcow2 + `-oci.txz` forms as GitHub Release attachments. See
+Tagged releases (from 1.5.1 onward) publish the OCI image to GHCR at
+`ghcr.io/doctorjei/gemet/yggdrasil:<ver>` (and `:latest`), and the
+.txz + qcow2 + `-oci.txz` forms as GitHub Release attachments. Earlier
+versions (≤ 1.5.0) remain at
+`ghcr.io/doctorjei/tenkei/yggdrasil:<ver>`. See
 [releases.md](releases.md) for pull commands and the full artifact
 inventory.
 
@@ -333,9 +335,9 @@ layering. The canonical pattern combines Yggdrasil with tenkei's
 VM-bootable image in a single Containerfile:
 
 ```dockerfile
-FROM tenkei-kernel:1.2.0 AS tenkei-kernel
+FROM ghcr.io/doctorjei/gemet/boot:1.5.1 AS tenkei-kernel
 
-FROM yggdrasil:1.2.0
+FROM ghcr.io/doctorjei/gemet/yggdrasil:1.5.1
 COPY --from=tenkei-kernel /boot/vmlinuz /boot/vmlinuz
 COPY --from=tenkei-kernel /boot/initramfs.img /boot/initramfs.img
 
@@ -343,9 +345,9 @@ COPY --from=tenkei-kernel /boot/initramfs.img /boot/initramfs.img
 ```
 
 Droste tiers will follow this pattern: each tier builds `FROM
-yggdrasil:<ver>` (or from an earlier tier built on top of Yggdrasil) and
-pulls the kernel/initramfs from `tenkei-kernel:<ver>` via
-`COPY --from=`.
+ghcr.io/doctorjei/gemet/yggdrasil:<ver>` (or from an earlier tier built
+on top of Yggdrasil) and pulls the kernel/initramfs from
+`ghcr.io/doctorjei/gemet/boot:<ver>` via `COPY --from=`.
 
 Downstream customizations are unrestricted — add packages, write config,
 create users, disable services. Each downstream image owns its own user

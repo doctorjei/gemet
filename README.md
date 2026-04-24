@@ -1,12 +1,55 @@
 # Tenkei
 
-Minimal VM kernel and initramfs for booting OCI container images as virtual machines.
+**Boot any OCI container image as a real VM — kernel and initramfs included, no disk image conversion.**
 
-Tenkei provides the missing link between OCI images and lightweight VMs: a stripped-down
-Linux kernel and initramfs that boots into a container rootfs served over virtiofs from
-the host. No disk images, no image conversion -- the same Podman layer store that
-[kento](https://github.com/doctorjei/kento) uses for LXC containers can also back
-full virtual machines.
+Tenkei is the missing link between OCI images and lightweight VMs: a
+stripped-down Linux kernel and initramfs that boots into a container
+rootfs served over virtiofs from the host. No disk images, no image
+conversion, no agent inside the guest — the same Podman layer store
+that [kento](https://github.com/doctorjei/kento) uses for LXC
+containers can also back full virtual machines.
+
+## Quick Start
+
+Grab the prebuilt kernel, initramfs, and a rootfs tarball from the
+latest release and boot a Bifrost (SSH-ready) VM:
+
+```bash
+# 1. Download prebuilt artifacts (needs: gh CLI)
+gh release download --repo doctorjei/tenkei \
+    --pattern 'vmlinuz' \
+    --pattern 'tenkei-initramfs.img' \
+    --pattern 'bifrost-*.txz'
+
+# 2. Unpack the rootfs
+mkdir bifrost-rootfs && sudo tar -xJf bifrost-*.txz -C bifrost-rootfs
+
+# 3. Clone this repo to pick up the boot-test helper
+git clone https://github.com/doctorjei/tenkei.git && cd tenkei
+
+# 4. Boot (needs: qemu-system-x86_64, virtiofsd, /dev/kvm access)
+sudo bash scripts/test-boot.sh \
+    --kernel ../vmlinuz \
+    --initrd ../tenkei-initramfs.img \
+    --rootfs ../bifrost-rootfs
+
+# 5. SSH in from another terminal
+ssh -p 2222 root@127.0.0.1
+```
+
+To consume tenkei as OCI images in a multi-stage build (the pattern
+[kento](https://github.com/doctorjei/kento) uses):
+
+```dockerfile
+FROM ghcr.io/doctorjei/gemet/boot:latest AS kernel
+FROM ghcr.io/doctorjei/gemet/bifrost:latest
+COPY --from=kernel /boot/vmlinuz /boot/vmlinuz
+COPY --from=kernel /boot/initramfs.img /boot/initramfs.img
+```
+
+See [docs/user-guide.md](docs/user-guide.md) for the full artifact
+catalog, other variants (Yggdrasil foundation, Canopy no-init), and
+usage patterns beyond the SSH happy path.
 
 ## How It Works
 
@@ -118,9 +161,7 @@ files are not committed — they are overwritten on the next upstream sync.
 Tenkei's own code wraps or overrides upstream behavior as needed. Local
 customization (e.g., kernel config fragments) is fine for personal builds.
 
-## Quick Start
-
-### Build
+## Build from Source
 
 ```bash
 # Build kernel + initramfs (output goes to build/)
@@ -147,7 +188,7 @@ companion `yggdrasil:<ver>` minimal Debian userland. See
 [docs/kernel-as-oci.md](docs/kernel-as-oci.md) and
 [docs/yggdrasil.md](docs/yggdrasil.md).
 
-### Boot Test
+### Boot-Test a Local Build
 
 ```bash
 # 1. Create a test rootfs
@@ -228,8 +269,11 @@ Tagged releases (`v*`) are built automatically by
   extension; build scripts emit `.txz` locally too), and xz-compressed
   OCI archives (`-oci.txz`) for all four images.
 - **OCI images on GHCR** —
-  `ghcr.io/doctorjei/tenkei/{yggdrasil,bifrost,canopy,tenkei-kernel}:<ver>`
-  (all also tagged `:latest`).
+  `ghcr.io/doctorjei/gemet/{yggdrasil,bifrost,canopy,boot}:<ver>`
+  (all also tagged `:latest`). The kernel image publishes as `boot`;
+  earlier versions (≤ 1.5.0) lived at
+  `ghcr.io/doctorjei/tenkei/{yggdrasil,bifrost,canopy,tenkei-kernel}`
+  and remain pullable at their original tags.
 
 Consumers can `podman pull` the GHCR images or download the tarball/qcow2
 forms directly from the release page. See

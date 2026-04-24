@@ -177,14 +177,14 @@ Kento provides full VM lifecycle management using tenkei's kernel and initramfs.
 The OCI image must include `/boot/vmlinuz` and `/boot/initramfs.img` (typically
 added by a [droste](https://github.com/doctorjei/droste) image layer, where droste
 is the project's nested-virt VM image builder — or via a two-line compose
-against `ghcr.io/doctorjei/tenkei/tenkei-kernel:<ver>`, see below).
+against `ghcr.io/doctorjei/gemet/boot:<ver>`, see below).
 
 **Quick compose against tenkei's GHCR images.** The simplest path is to
 stack the kernel image onto one of tenkei's rootfs images:
 
 ```dockerfile
-FROM ghcr.io/doctorjei/tenkei/tenkei-kernel:1.4.2 AS kernel
-FROM ghcr.io/doctorjei/tenkei/bifrost:1.4.2
+FROM ghcr.io/doctorjei/gemet/boot:1.5.1 AS kernel
+FROM ghcr.io/doctorjei/gemet/bifrost:1.5.1
 COPY --from=kernel /boot/vmlinuz /boot/vmlinuz
 COPY --from=kernel /boot/initramfs.img /boot/initramfs.img
 ```

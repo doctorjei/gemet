@@ -23,12 +23,18 @@ or build output staged on disk next to their Containerfile.
 
 ## Pulling from GHCR
 
-Tagged releases are published to
-`ghcr.io/doctorjei/tenkei/tenkei-kernel:<ver>` (and `:latest`):
+As of tenkei 1.5.1, tagged releases are published to
+`ghcr.io/doctorjei/gemet/boot:<ver>` (and `:latest`):
 
 ```bash
-podman pull ghcr.io/doctorjei/tenkei/tenkei-kernel:1.2.0
+podman pull ghcr.io/doctorjei/gemet/boot:1.5.1
 ```
+
+Versions 1.0.0 – 1.5.0 were published to
+`ghcr.io/doctorjei/tenkei/tenkei-kernel:<ver>` and remain pullable at
+their original tags. The local build target is still
+`localhost/tenkei-kernel:<ver>` — the rename is GHCR-side only and
+the full internal rename lands with the v2.0.0 Gemet migration.
 
 See [releases.md](releases.md) for the full artifact inventory and the
 draft-gate process for kernel/initramfs-touching releases.
@@ -65,7 +71,7 @@ Two files, one layer, no runtime behavior.
 The intended consumption pattern is a multi-stage Containerfile:
 
 ```dockerfile
-FROM ghcr.io/doctorjei/tenkei/tenkei-kernel:1.2.0 AS tenkei-kernel
+FROM ghcr.io/doctorjei/gemet/boot:1.5.1 AS tenkei-kernel
 
 FROM debian:bookworm  # or yggdrasil:<ver>, etc.
 COPY --from=tenkei-kernel /boot/vmlinuz /boot/vmlinuz
@@ -127,9 +133,9 @@ kernel-as-OCI gives you the boot stack. A "full VM image" Containerfile
 typically pulls from both:
 
 ```dockerfile
-FROM ghcr.io/doctorjei/tenkei/tenkei-kernel:1.2.0 AS tenkei-kernel
+FROM ghcr.io/doctorjei/gemet/boot:1.5.1 AS tenkei-kernel
 
-FROM ghcr.io/doctorjei/tenkei/yggdrasil:1.2.0
+FROM ghcr.io/doctorjei/gemet/yggdrasil:1.5.1
 COPY --from=tenkei-kernel /boot/vmlinuz /boot/vmlinuz
 COPY --from=tenkei-kernel /boot/initramfs.img /boot/initramfs.img
 

@@ -456,32 +456,32 @@ jobs:
           VERSION="${{ steps.ver.outputs.version }}"
 
           podman tag "localhost/yggdrasil:${VERSION}" \
-            "ghcr.io/doctorjei/tenkei/yggdrasil:${VERSION}"
+            "ghcr.io/doctorjei/gemet/yggdrasil:${VERSION}"
           podman tag "localhost/yggdrasil:${VERSION}" \
-            "ghcr.io/doctorjei/tenkei/yggdrasil:latest"
-          podman push "ghcr.io/doctorjei/tenkei/yggdrasil:${VERSION}"
-          podman push "ghcr.io/doctorjei/tenkei/yggdrasil:latest"
+            "ghcr.io/doctorjei/gemet/yggdrasil:latest"
+          podman push "ghcr.io/doctorjei/gemet/yggdrasil:${VERSION}"
+          podman push "ghcr.io/doctorjei/gemet/yggdrasil:latest"
 
           podman tag "localhost/bifrost:${VERSION}" \
-            "ghcr.io/doctorjei/tenkei/bifrost:${VERSION}"
+            "ghcr.io/doctorjei/gemet/bifrost:${VERSION}"
           podman tag "localhost/bifrost:${VERSION}" \
-            "ghcr.io/doctorjei/tenkei/bifrost:latest"
-          podman push "ghcr.io/doctorjei/tenkei/bifrost:${VERSION}"
-          podman push "ghcr.io/doctorjei/tenkei/bifrost:latest"
+            "ghcr.io/doctorjei/gemet/bifrost:latest"
+          podman push "ghcr.io/doctorjei/gemet/bifrost:${VERSION}"
+          podman push "ghcr.io/doctorjei/gemet/bifrost:latest"
 
           podman tag "localhost/canopy:${VERSION}" \
-            "ghcr.io/doctorjei/tenkei/canopy:${VERSION}"
+            "ghcr.io/doctorjei/gemet/canopy:${VERSION}"
           podman tag "localhost/canopy:${VERSION}" \
-            "ghcr.io/doctorjei/tenkei/canopy:latest"
-          podman push "ghcr.io/doctorjei/tenkei/canopy:${VERSION}"
-          podman push "ghcr.io/doctorjei/tenkei/canopy:latest"
+            "ghcr.io/doctorjei/gemet/canopy:latest"
+          podman push "ghcr.io/doctorjei/gemet/canopy:${VERSION}"
+          podman push "ghcr.io/doctorjei/gemet/canopy:latest"
 
           podman tag "localhost/tenkei-kernel:${VERSION}" \
-            "ghcr.io/doctorjei/tenkei/tenkei-kernel:${VERSION}"
+            "ghcr.io/doctorjei/gemet/boot:${VERSION}"
           podman tag "localhost/tenkei-kernel:${VERSION}" \
-            "ghcr.io/doctorjei/tenkei/tenkei-kernel:latest"
-          podman push "ghcr.io/doctorjei/tenkei/tenkei-kernel:${VERSION}"
-          podman push "ghcr.io/doctorjei/tenkei/tenkei-kernel:latest"
+            "ghcr.io/doctorjei/gemet/boot:latest"
+          podman push "ghcr.io/doctorjei/gemet/boot:${VERSION}"
+          podman push "ghcr.io/doctorjei/gemet/boot:latest"
 
       - name: Compress OCI archives for release attachment (on tagged version)
         if: steps.ver.outputs.is_tag_push == 'true'

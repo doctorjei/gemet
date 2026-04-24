@@ -40,28 +40,36 @@ natively.
 
 ### OCI images on GHCR
 
-Pushed to `ghcr.io/doctorjei/tenkei/` at both the exact version and `:latest`:
+As of 1.5.1, images push to `ghcr.io/doctorjei/gemet/` at both the
+exact version and `:latest`:
 
 | Image                                                | What it contains                                               |
 |------------------------------------------------------|----------------------------------------------------------------|
-| `ghcr.io/doctorjei/tenkei/yggdrasil:<ver>`           | Yggdrasil rootfs (Debian + systemd). See [yggdrasil.md](yggdrasil.md). |
-| `ghcr.io/doctorjei/tenkei/bifrost:<ver>`             | Yggdrasil + SSH opinion layer. See [bifrost.md](bifrost.md).   |
-| `ghcr.io/doctorjei/tenkei/canopy:<ver>`              | Yggdrasil minus init-family (no pid1). See [canopy.md](canopy.md). |
-| `ghcr.io/doctorjei/tenkei/tenkei-kernel:<ver>`       | `/boot/vmlinuz` + `/boot/initramfs.img`. See [kernel-as-oci.md](kernel-as-oci.md). |
+| `ghcr.io/doctorjei/gemet/yggdrasil:<ver>`            | Yggdrasil rootfs (Debian + systemd). See [yggdrasil.md](yggdrasil.md). |
+| `ghcr.io/doctorjei/gemet/bifrost:<ver>`              | Yggdrasil + SSH opinion layer. See [bifrost.md](bifrost.md).   |
+| `ghcr.io/doctorjei/gemet/canopy:<ver>`               | Yggdrasil minus init-family (no pid1). See [canopy.md](canopy.md). |
+| `ghcr.io/doctorjei/gemet/boot:<ver>`                 | `/boot/vmlinuz` + `/boot/initramfs.img`. See [kernel-as-oci.md](kernel-as-oci.md). |
 | `...:latest`                                         | Alias for the most recent tagged release (all 4 images).       |
+
+Versions 1.0.0 – 1.5.0 published to
+`ghcr.io/doctorjei/tenkei/{yggdrasil,bifrost,canopy,tenkei-kernel}`
+and remain pullable at their original tags. The kernel package renamed
+from `tenkei-kernel` to `boot` with the namespace switch; image
+internals and release-attachment filenames still carry the `tenkei`
+prefix (full internal rename lands in v2.0.0).
 
 Pulls work anonymously for public images:
 
 ```bash
-podman pull ghcr.io/doctorjei/tenkei/yggdrasil:1.4.2
-podman pull ghcr.io/doctorjei/tenkei/bifrost:1.4.2
-podman pull ghcr.io/doctorjei/tenkei/canopy:1.4.2
-podman pull ghcr.io/doctorjei/tenkei/tenkei-kernel:1.4.2
+podman pull ghcr.io/doctorjei/gemet/yggdrasil:1.5.1
+podman pull ghcr.io/doctorjei/gemet/bifrost:1.5.1
+podman pull ghcr.io/doctorjei/gemet/canopy:1.5.1
+podman pull ghcr.io/doctorjei/gemet/boot:1.5.1
 ```
 
 Downstream multi-stage consumers (droste, kento test fixtures) should pull
-`tenkei-kernel:<ver>` in a `FROM` stage and `COPY --from=` the two boot
-files into their own rootfs image. See
+`boot:<ver>` in a `FROM` stage and `COPY --from=` the two boot files
+into their own rootfs image. See
 [docs/kernel-as-oci.md](kernel-as-oci.md) for the canonical pattern.
 
 ### Kento composition pattern
@@ -71,8 +79,8 @@ both rootfs and `/boot/{vmlinuz,initramfs.img}` present. Compose the
 two tenkei images with a two-line Containerfile:
 
 ```dockerfile
-FROM ghcr.io/doctorjei/tenkei/tenkei-kernel:1.4.2 AS kernel
-FROM ghcr.io/doctorjei/tenkei/bifrost:1.4.2
+FROM ghcr.io/doctorjei/gemet/boot:1.5.1 AS kernel
+FROM ghcr.io/doctorjei/gemet/bifrost:1.5.1
 COPY --from=kernel /boot/vmlinuz /boot/vmlinuz
 COPY --from=kernel /boot/initramfs.img /boot/initramfs.img
 ```
