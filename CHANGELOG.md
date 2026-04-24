@@ -10,20 +10,23 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Release pipeline now publishes OCI images to
   `ghcr.io/doctorjei/gemet/{yggdrasil,bifrost,canopy,boot}:<ver>` (and
   `:latest`). The kernel package renamed from `tenkei-kernel` to
-  `boot` with the namespace switch. No code or artifact internals
-  changed — this is a GHCR-publishing move to a new registry
-  namespace preparatory to the Gemet rename landing in v2.0.0.
-- Docs (`README.md`, `docs/{kernel-as-oci,releases,user-guide,
-  yggdrasil,canopy}.md`) updated to reference the new GHCR paths.
+  `boot` with the namespace switch. Preparatory to the Gemet rename
+  landing in v2.0.0.
+- Release-attachment filenames drop the `tenkei-` prefix:
+  `tenkei-initramfs.img` → `gemet-initramfs.img`;
+  `tenkei-kernel-<ver>-oci.{tar,txz}` → `gemet-boot-<ver>-oci.{tar,txz}`.
+- Local build targets: `localhost/tenkei-kernel` → `localhost/gemet-kernel`.
+- Build scripts, CI test scripts, and docs updated to reference the new
+  filenames and image tags.
 
 ### Notes
 - Versions 1.0.0 – 1.5.0 remain pullable at their original
   `ghcr.io/doctorjei/tenkei/{yggdrasil,bifrost,canopy,tenkei-kernel}`
-  tags. No force-push or retagging of the old namespace.
-- Local build targets (`localhost/tenkei-kernel`, `localhost/yggdrasil`
-  etc.) and release-attachment filenames (`tenkei-initramfs.img`,
-  `tenkei-kernel-<ver>-oci.txz`) are unchanged; they move when the
-  full internal rename lands in v2.0.0.
+  tags with their original attachment filenames. No force-push or
+  retagging of the old namespace.
+- Image internals (scripts, paths, variable names inside the rootfs)
+  still carry the `tenkei` prefix. Full internal rename lands in
+  v2.0.0 with the Gemet migration.
 
 ## [1.5.0] — 2026-04-23
 
@@ -173,12 +176,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Initial production release.
 
-[1.5.1]: https://github.com/doctorjei/tenkei/releases/tag/v1.5.1
-[1.5.0]: https://github.com/doctorjei/tenkei/releases/tag/v1.5.0
-[1.4.2]: https://github.com/doctorjei/tenkei/releases/tag/v1.4.2
-[1.4.1]: https://github.com/doctorjei/tenkei/releases/tag/v1.4.1
-[1.4.0]: https://github.com/doctorjei/tenkei/releases/tag/v1.4.0
-[1.3.0]: https://github.com/doctorjei/tenkei/releases/tag/v1.3.0
-[1.2.0]: https://github.com/doctorjei/tenkei/releases/tag/v1.2.0
-[1.0.1]: https://github.com/doctorjei/tenkei/releases/tag/v1.0.1
-[1.0.0]: https://github.com/doctorjei/tenkei/releases/tag/v1.0.0
+[1.5.1]: https://github.com/doctorjei/gemet/releases/tag/v1.5.1
+[1.5.0]: https://github.com/doctorjei/gemet/releases/tag/v1.5.0
+[1.4.2]: https://github.com/doctorjei/gemet/releases/tag/v1.4.2
+[1.4.1]: https://github.com/doctorjei/gemet/releases/tag/v1.4.1
+[1.4.0]: https://github.com/doctorjei/gemet/releases/tag/v1.4.0
+[1.3.0]: https://github.com/doctorjei/gemet/releases/tag/v1.3.0
+[1.2.0]: https://github.com/doctorjei/gemet/releases/tag/v1.2.0
+[1.0.1]: https://github.com/doctorjei/gemet/releases/tag/v1.0.1
+[1.0.0]: https://github.com/doctorjei/gemet/releases/tag/v1.0.0

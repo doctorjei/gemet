@@ -16,7 +16,7 @@
 # The install step also builds the initramfs if it doesn't exist yet.
 # Output goes to build/ in the repo root:
 #   build/vmlinuz              — compressed kernel
-#   build/tenkei-initramfs.img — initramfs with busybox + virtiofs init
+#   build/gemet-initramfs.img — initramfs with busybox + virtiofs init
 #
 # Environment:
 #   KERNEL_ARCH     — target architecture (default: x86_64)
@@ -50,7 +50,7 @@ Arguments:
 
 Output (after install):
   build/vmlinuz              Compressed kernel image
-  build/tenkei-initramfs.img Initramfs (busybox + virtiofs init)
+  build/gemet-initramfs.img Initramfs (busybox + virtiofs init)
 
 Note: run all steps from the same directory — the kernel source is
 placed in the current working directory by the upstream script.
@@ -144,7 +144,7 @@ install_tenkei() {
         "Ensure all steps (setup, build, install) run from the same directory."
 
     # Build initramfs if needed
-    local initramfs="${REPO_ROOT}/initramfs/tenkei-initramfs.img"
+    local initramfs="${REPO_ROOT}/initramfs/gemet-initramfs.img"
     if [[ ! -f "$initramfs" ]]; then
         info "Building initramfs..."
         bash "${REPO_ROOT}/initramfs/build.sh"
@@ -154,11 +154,11 @@ install_tenkei() {
     # Copy to build/
     mkdir -p "$build_dir"
     cp "$bzimage" "${build_dir}/vmlinuz"
-    cp "$initramfs" "${build_dir}/tenkei-initramfs.img"
+    cp "$initramfs" "${build_dir}/gemet-initramfs.img"
 
     info "Installed to ${build_dir}/"
     info "  vmlinuz              $(du -h "${build_dir}/vmlinuz" | cut -f1)"
-    info "  tenkei-initramfs.img $(du -h "${build_dir}/tenkei-initramfs.img" | cut -f1)"
+    info "  gemet-initramfs.img $(du -h "${build_dir}/gemet-initramfs.img" | cut -f1)"
 }
 
 # ─── Main ──────────────────────────────────────────────────────────

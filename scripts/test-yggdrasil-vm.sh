@@ -13,7 +13,7 @@
 # Options:
 #   --image <tag>     OCI image tag to test (default: yggdrasil:<VERSION>)
 #   --kernel <path>   Path to vmlinuz (default: build/vmlinuz)
-#   --initrd <path>   Path to initramfs (default: build/tenkei-initramfs.img)
+#   --initrd <path>   Path to initramfs (default: build/gemet-initramfs.img)
 #   --memory <MB>     VM memory in MB (default: 512)
 #   -h, --help        Show this help
 #
@@ -47,7 +47,7 @@ Extracts yggdrasil:<ver> into a temp rootfs and boots it via test-boot.sh.
 Options:
   --image <tag>     OCI image tag to test (default: yggdrasil:<VERSION>)
   --kernel <path>   Path to vmlinuz (default: build/vmlinuz)
-  --initrd <path>   Path to initramfs (default: build/tenkei-initramfs.img)
+  --initrd <path>   Path to initramfs (default: build/gemet-initramfs.img)
   --memory <MB>     VM memory in MB (default: 512)
   -h, --help        Show this help
 
@@ -62,7 +62,7 @@ default_version=""
 [[ -f "$VERSION_FILE" ]] && default_version="$(tr -d '[:space:]' < "$VERSION_FILE")"
 IMAGE="yggdrasil:${default_version:-latest}"
 KERNEL="$REPO_ROOT/build/vmlinuz"
-INITRD="$REPO_ROOT/build/tenkei-initramfs.img"
+INITRD="$REPO_ROOT/build/gemet-initramfs.img"
 MEMORY=512
 PASSTHROUGH=()
 

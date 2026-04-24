@@ -3,8 +3,8 @@
 # build-kernel-oci — Package tenkei's kernel + initramfs as an OCI image
 #
 # Wraps `podman build` to produce a single-layer image containing
-# /boot/vmlinuz and /boot/initramfs.img, tagged tenkei-kernel:<version>
-# (and tenkei-kernel:latest for convenience).
+# /boot/vmlinuz and /boot/initramfs.img, tagged gemet-kernel:<version>
+# (and gemet-kernel:latest for convenience).
 #
 # Usage:
 #   build-kernel-oci [version]
@@ -12,7 +12,7 @@
 # If version is omitted, the contents of ./VERSION are used.
 #
 # Prerequisite: run scripts/build-kernel.sh first so that
-# build/vmlinuz and build/tenkei-initramfs.img exist.
+# build/vmlinuz and build/gemet-initramfs.img exist.
 #
 # Run from the root of your tenkei repository.
 #
@@ -25,8 +25,8 @@ VERSION_FILE="${REPO_ROOT}/VERSION"
 CONTAINERFILE="${REPO_ROOT}/kernel/Containerfile"
 BUILD_DIR="${REPO_ROOT}/build"
 KERNEL_SRC="${BUILD_DIR}/vmlinuz"
-INITRAMFS_SRC="${BUILD_DIR}/tenkei-initramfs.img"
-IMAGE_NAME="tenkei-kernel"
+INITRAMFS_SRC="${BUILD_DIR}/gemet-initramfs.img"
+IMAGE_NAME="gemet-kernel"
 
 # ─── Helpers ───────────────────────────────────────────────────────
 
@@ -40,9 +40,9 @@ usage() {
     cat <<'USAGE'
 Usage: build-kernel-oci [version]
 
-Builds an OCI image tagged tenkei-kernel:<version> (and :latest)
+Builds an OCI image tagged gemet-kernel:<version> (and :latest)
 containing /boot/vmlinuz and /boot/initramfs.img, sourced from
-build/vmlinuz and build/tenkei-initramfs.img.
+build/vmlinuz and build/gemet-initramfs.img.
 
 If version is omitted, the contents of ./VERSION are used.
 USAGE
@@ -127,7 +127,7 @@ main() {
     check_inputs
 
     local staging
-    staging="$(mktemp -d -t tenkei-kernel-oci-XXXXXX)"
+    staging="$(mktemp -d -t gemet-kernel-oci-XXXXXX)"
     # shellcheck disable=SC2064
     trap "rm -rf '${staging}'" EXIT
 

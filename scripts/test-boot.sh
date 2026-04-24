@@ -23,7 +23,7 @@
 #   # 4. Boot it (networking + SSH forwarding enabled by default)
 #   bash scripts/test-boot.sh \
 #       --kernel /path/to/vmlinuz \
-#       --initrd initramfs/tenkei-initramfs.img \
+#       --initrd initramfs/gemet-initramfs.img \
 #       --rootfs /tmp/test-rootfs
 #
 #   # 5. SSH in from another terminal

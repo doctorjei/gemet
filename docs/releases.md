@@ -13,12 +13,12 @@ runs structural and systemd-in-OCI health checks, and publishes the release.
 
 ### GitHub Release attachments
 
-Attached to the release page at `github.com/doctorjei/tenkei/releases/tag/v<ver>`:
+Attached to the release page at `github.com/doctorjei/gemet/releases/tag/v<ver>`:
 
 | File                               | Size     | Purpose                                                              |
 |------------------------------------|---------:|----------------------------------------------------------------------|
 | `vmlinuz`                          | ~7.5 MB  | Compressed kernel. Drop at `build/vmlinuz` to skip local compile.    |
-| `tenkei-initramfs.img`             | ~1.1 MB  | gzip+cpio initramfs (busybox + virtiofs-aware init script).          |
+| `gemet-initramfs.img`              | ~1.1 MB  | gzip+cpio initramfs (busybox + virtiofs-aware init script).          |
 | `yggdrasil-<ver>.txz`              |  ~57 MB  | Yggdrasil rootfs tarball (xz-compressed).                            |
 | `yggdrasil-<ver>.qcow2`            |  ~87 MB  | Bootable partition-less ext4 disk image for `qemu -drive`.           |
 | `yggdrasil-<ver>-oci.txz`          |  ~60 MB  | OCI archive of the Yggdrasil image (air-gapped `podman load`, xz-compressed). |
@@ -28,7 +28,7 @@ Attached to the release page at `github.com/doctorjei/tenkei/releases/tag/v<ver>
 | `canopy-<ver>.txz`                 |  ~46 MB  | Canopy (no-init) rootfs tarball. Not independently bootable.         |
 | `canopy-<ver>.qcow2`               |  ~71 MB  | Canopy disk image (composition base — no pid1).                      |
 | `canopy-<ver>-oci.txz`             |  ~49 MB  | OCI archive of the Canopy image (xz-compressed).                     |
-| `tenkei-kernel-<ver>-oci.txz`      |  ~7 MB   | OCI archive of the kernel-only image (multi-stage `COPY --from=`, xz-compressed). |
+| `gemet-boot-<ver>-oci.txz`         |  ~7 MB   | OCI archive of the kernel-only image (multi-stage `COPY --from=`, xz-compressed). |
 
 Rootfs archives are published as `.txz` (same xz format, canonical
 shorter extension — `.tar.xz` through v1.4.1, renamed on the release
@@ -54,9 +54,12 @@ exact version and `:latest`:
 Versions 1.0.0 – 1.5.0 published to
 `ghcr.io/doctorjei/tenkei/{yggdrasil,bifrost,canopy,tenkei-kernel}`
 and remain pullable at their original tags. The kernel package renamed
-from `tenkei-kernel` to `boot` with the namespace switch; image
-internals and release-attachment filenames still carry the `tenkei`
-prefix (full internal rename lands in v2.0.0).
+from `tenkei-kernel` to `boot` with the namespace switch.
+Release-attachment filenames also rename at 1.5.1 —
+`tenkei-initramfs.img` → `gemet-initramfs.img` and
+`tenkei-kernel-<ver>-oci.txz` → `gemet-boot-<ver>-oci.txz`. Image
+internals (scripts, labels, variable names inside the rootfs) still
+carry the `tenkei` prefix; the full internal rename lands in v2.0.0.
 
 Pulls work anonymously for public images:
 

@@ -302,7 +302,7 @@ is:
 ```bash
 qemu-system-x86_64 \
     -kernel build/vmlinuz \
-    -initrd build/tenkei-initramfs.img \
+    -initrd build/gemet-initramfs.img \
     -drive file=build/yggdrasil-<ver>.qcow2,format=qcow2,if=virtio \
     -append "console=ttyS0 root=/dev/vda rootfstype=ext4"
 ```
@@ -335,11 +335,11 @@ layering. The canonical pattern combines Yggdrasil with tenkei's
 VM-bootable image in a single Containerfile:
 
 ```dockerfile
-FROM ghcr.io/doctorjei/gemet/boot:1.5.1 AS tenkei-kernel
+FROM ghcr.io/doctorjei/gemet/boot:1.5.1 AS kernel
 
 FROM ghcr.io/doctorjei/gemet/yggdrasil:1.5.1
-COPY --from=tenkei-kernel /boot/vmlinuz /boot/vmlinuz
-COPY --from=tenkei-kernel /boot/initramfs.img /boot/initramfs.img
+COPY --from=kernel /boot/vmlinuz /boot/vmlinuz
+COPY --from=kernel /boot/initramfs.img /boot/initramfs.img
 
 # ... your customizations ...
 ```

@@ -12,7 +12,7 @@
 # Options:
 #   --disk <path>     qcow2 disk image (default: build/yggdrasil-<VERSION>.qcow2)
 #   --kernel <path>   Path to vmlinuz   (default: build/vmlinuz)
-#   --initrd <path>   Path to initramfs (default: build/tenkei-initramfs.img)
+#   --initrd <path>   Path to initramfs (default: build/gemet-initramfs.img)
 #   --memory <MB>     VM memory in MB   (default: 512)
 #   --ssh-port <port> Host port forwarded to guest SSH (default: 2223)
 #   --no-kvm          Disable KVM (slow, but works without /dev/kvm)
@@ -52,7 +52,7 @@ Boots a Yggdrasil qcow2 image externally with tenkei's kernel/initramfs.
 Options:
   --disk <path>     qcow2 disk image (default: build/yggdrasil-<VERSION>.qcow2)
   --kernel <path>   Path to vmlinuz   (default: build/vmlinuz)
-  --initrd <path>   Path to initramfs (default: build/tenkei-initramfs.img)
+  --initrd <path>   Path to initramfs (default: build/gemet-initramfs.img)
   --memory <MB>     VM memory in MB   (default: 512)
   --ssh-port <port> Host port forwarded to guest SSH (default: 2223)
   --no-kvm          Disable KVM (slow, but works without /dev/kvm)
@@ -70,7 +70,7 @@ default_version=""
 
 DISK="$REPO_ROOT/build/yggdrasil-${default_version:-latest}.qcow2"
 KERNEL="$REPO_ROOT/build/vmlinuz"
-INITRD="$REPO_ROOT/build/tenkei-initramfs.img"
+INITRD="$REPO_ROOT/build/gemet-initramfs.img"
 MEMORY=512
 SSH_PORT=2223
 USE_KVM=true

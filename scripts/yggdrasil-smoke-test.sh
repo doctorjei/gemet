@@ -14,7 +14,7 @@
 # Options:
 #   --qcow2 <path>    qcow2 disk image (default: ./yggdrasil-*.qcow2 in script dir)
 #   --kernel <path>   Path to vmlinuz   (default: ./vmlinuz in script dir)
-#   --initrd <path>   Path to initramfs (default: ./tenkei-initramfs.img in script dir)
+#   --initrd <path>   Path to initramfs (default: ./gemet-initramfs.img in script dir)
 #   --memory <MB>     VM memory in MB   (default: 512)
 #   --timeout <sec>   Boot wait timeout (default: 90)
 #   --no-kvm          Force TCG (default: auto-detect /dev/kvm)
@@ -63,7 +63,7 @@ reaches a login prompt by pattern-matching the serial console.
 Options:
   --qcow2 <path>    qcow2 disk image (default: ./yggdrasil-*.qcow2 in script dir)
   --kernel <path>   Path to vmlinuz   (default: ./vmlinuz in script dir)
-  --initrd <path>   Path to initramfs (default: ./tenkei-initramfs.img in script dir)
+  --initrd <path>   Path to initramfs (default: ./gemet-initramfs.img in script dir)
   --memory <MB>     VM memory in MB   (default: 512)
   --timeout <sec>   Boot wait timeout (default: 90)
   --no-kvm          Force TCG (default: auto-detect /dev/kvm)
@@ -83,7 +83,7 @@ USAGE
 
 QCOW2=""
 KERNEL="$SCRIPT_DIR/vmlinuz"
-INITRD="$SCRIPT_DIR/tenkei-initramfs.img"
+INITRD="$SCRIPT_DIR/gemet-initramfs.img"
 MEMORY=512
 TIMEOUT=90
 USE_KVM=true

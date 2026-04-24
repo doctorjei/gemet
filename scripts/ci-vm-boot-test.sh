@@ -39,7 +39,7 @@
 #
 # Expected artifacts in <build-dir>:
 #   vmlinuz                        the tenkei kernel
-#   tenkei-initramfs.img           the patched initramfs
+#   gemet-initramfs.img           the patched initramfs
 #   <variant>-<ver>.txz            rootfs tarball (xz-compressed tar)
 #   <variant>-<ver>.qcow2          rootfs disk image
 #   VERSION                        optional; otherwise inferred from filenames
@@ -96,7 +96,7 @@ BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"
 
 # ── Resolve artifacts ──────────────────────────────────────────────
 KERNEL="$BUILD_DIR/vmlinuz"
-INITRAMFS="$BUILD_DIR/tenkei-initramfs.img"
+INITRAMFS="$BUILD_DIR/gemet-initramfs.img"
 [[ -f "$KERNEL" ]]    || error "missing $KERNEL"
 [[ -f "$INITRAMFS" ]] || error "missing $INITRAMFS"
 

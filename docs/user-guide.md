@@ -43,7 +43,7 @@ bash scripts/build-kernel.sh 6.18.15 install  # copy vmlinuz + initramfs to buil
 
 Output:
 - `build/vmlinuz` -- compressed kernel (~7.5 MB)
-- `build/tenkei-initramfs.img` -- initramfs (~1.1 MB)
+- `build/gemet-initramfs.img` -- initramfs (~1.1 MB)
 
 Requirements: build-essential, flex, bison, bc, libelf-dev, libssl-dev, busybox-static.
 
@@ -100,7 +100,7 @@ To build:
 
 ```bash
 bash initramfs/build.sh                              # default output
-bash initramfs/build.sh /path/to/tenkei-initramfs.img  # custom output path
+bash initramfs/build.sh /path/to/gemet-initramfs.img  # custom output path
 ```
 
 Requirements: busybox-static (`apt install busybox-static`).
@@ -136,7 +136,7 @@ sudo bash scripts/create-test-rootfs.sh /tmp/test-rootfs
 # 3. Boot it (handles virtiofsd + QEMU + networking automatically)
 sudo bash scripts/test-boot.sh \
     --kernel build/vmlinuz \
-    --initrd build/tenkei-initramfs.img \
+    --initrd build/gemet-initramfs.img \
     --rootfs /tmp/test-rootfs
 
 # 4. SSH in from another terminal
@@ -159,7 +159,7 @@ virtiofsd \
 # 3. Boot the VM
 qemu-system-x86_64 \
     -kernel build/vmlinuz \
-    -initrd build/tenkei-initramfs.img \
+    -initrd build/gemet-initramfs.img \
     -m 512 -cpu host -enable-kvm \
     -chardev socket,id=vfs,path=/tmp/vfs.sock \
     -device vhost-user-fs-pci,chardev=vfs,tag=rootfs \
@@ -252,7 +252,8 @@ Key requirements for a VM-bootable image:
 ## Kernel as OCI image
 
 Tenkei also publishes its kernel + initramfs as a single-layer OCI image
-(`tenkei-kernel:<ver>`), a companion to the raw `build/` outputs.
+(`ghcr.io/doctorjei/gemet/boot:<ver>`, built locally as
+`localhost/gemet-kernel:<ver>`), a companion to the raw `build/` outputs.
 Downstream VM images consume it via multi-stage `COPY --from=` instead of
 staging the files next to the Containerfile.
 
@@ -421,7 +422,7 @@ To enable DAX in test-boot.sh:
 ```bash
 sudo bash scripts/test-boot.sh \
     --kernel build/vmlinuz \
-    --initrd build/tenkei-initramfs.img \
+    --initrd build/gemet-initramfs.img \
     --rootfs /tmp/test-rootfs \
     --dax          # 256M default cache window
     # or: --dax 512M  for a larger window

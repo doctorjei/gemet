@@ -4,13 +4,13 @@
 #
 # Runs unprivileged structural tests against a tenkei build/ directory
 # (vmlinuz, initramfs, yggdrasil/bifrost/canopy tarballs + qcow2s +
-# OCI archives, tenkei-kernel OCI). Designed to run on a vanilla
+# OCI archives, gemet-kernel OCI). Designed to run on a vanilla
 # ubuntu-24.04 GitHub runner with no KVM, no root, no podman. All OCI
 # inspection goes through scripts/extract-oci.sh (pure-shell extractor,
 # already in the repo).
 #
 # Variant auto-detection:
-#   The yggdrasil + tenkei-kernel checks always run (they are required
+#   The yggdrasil + gemet-kernel checks always run (they are required
 #   artifacts for every tenkei release). The bifrost + canopy check
 #   blocks auto-detect based on whether their .txz artifact exists
 #   in --build-dir — so local partial builds (yggdrasil-only) still
@@ -149,9 +149,9 @@ else
 fi
 echo ""
 
-# ─── Check 3: tenkei-initramfs.img ────────────────────────────────
-info "Check 3: tenkei-initramfs.img"
-INITRAMFS="$BUILD_DIR/tenkei-initramfs.img"
+# ─── Check 3: gemet-initramfs.img ────────────────────────────────
+info "Check 3: gemet-initramfs.img"
+INITRAMFS="$BUILD_DIR/gemet-initramfs.img"
 if [[ ! -f "$INITRAMFS" ]]; then
     fail "initramfs not found at $INITRAMFS"
 elif [[ ! -s "$INITRAMFS" ]]; then
@@ -288,9 +288,9 @@ else
 fi
 echo ""
 
-# ─── Check 7: tenkei-kernel-<ver>-oci.tar ─────────────────────────
-info "Check 7: tenkei-kernel-${VERSION}-oci.tar"
-KERN_OCI="$BUILD_DIR/tenkei-kernel-${VERSION}-oci.tar"
+# ─── Check 7: gemet-boot-<ver>-oci.tar ─────────────────────────────
+info "Check 7: gemet-boot-${VERSION}-oci.tar"
+KERN_OCI="$BUILD_DIR/gemet-boot-${VERSION}-oci.tar"
 if [[ ! -f "$KERN_OCI" ]]; then
     fail "kernel OCI archive not found at $KERN_OCI"
 elif [[ ! -s "$KERN_OCI" ]]; then

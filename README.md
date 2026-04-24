@@ -16,21 +16,21 @@ latest release and boot a Bifrost (SSH-ready) VM:
 
 ```bash
 # 1. Download prebuilt artifacts (needs: gh CLI)
-gh release download --repo doctorjei/tenkei \
+gh release download --repo doctorjei/gemet \
     --pattern 'vmlinuz' \
-    --pattern 'tenkei-initramfs.img' \
+    --pattern 'gemet-initramfs.img' \
     --pattern 'bifrost-*.txz'
 
 # 2. Unpack the rootfs
 mkdir bifrost-rootfs && sudo tar -xJf bifrost-*.txz -C bifrost-rootfs
 
 # 3. Clone this repo to pick up the boot-test helper
-git clone https://github.com/doctorjei/tenkei.git && cd tenkei
+git clone https://github.com/doctorjei/gemet.git && cd gemet
 
 # 4. Boot (needs: qemu-system-x86_64, virtiofsd, /dev/kvm access)
 sudo bash scripts/test-boot.sh \
     --kernel ../vmlinuz \
-    --initrd ../tenkei-initramfs.img \
+    --initrd ../gemet-initramfs.img \
     --rootfs ../bifrost-rootfs
 
 # 5. SSH in from another terminal
@@ -88,8 +88,8 @@ images.
 | Form     | Output                                | Details                                 |
 |----------|---------------------------------------|-----------------------------------------|
 | Raw      | `build/vmlinuz`                       | compressed kernel (~7.5 MB)             |
-| Raw      | `build/tenkei-initramfs.img`          | initramfs (~1.1 MB)                     |
-| OCI      | `tenkei-kernel:<ver>`                 | kernel-as-OCI — see [docs/kernel-as-oci.md](docs/kernel-as-oci.md) |
+| Raw      | `build/gemet-initramfs.img`          | initramfs (~1.1 MB)                     |
+| OCI      | `gemet-kernel:<ver>` (local) / `gemet/boot:<ver>` (GHCR) | kernel-as-OCI — see [docs/kernel-as-oci.md](docs/kernel-as-oci.md) |
 | OCI      | `yggdrasil:<ver>`                     | minimal Debian 13 + systemd userland (~210-230 MB) — see [docs/yggdrasil.md](docs/yggdrasil.md) |
 | OCI      | `bifrost:<ver>`                       | Yggdrasil + opinionated SSH layer — see [docs/bifrost.md](docs/bifrost.md) |
 | OCI      | `canopy:<ver>`                        | Yggdrasil minus init-family (no-init base) — see [docs/canopy.md](docs/canopy.md) |
@@ -173,7 +173,7 @@ compiles it, builds the initramfs, and copies both to `build/`:
 
 ```
 build/vmlinuz              -- compressed kernel (~7.5 MB)
-build/tenkei-initramfs.img -- initramfs (~1.1 MB)
+build/gemet-initramfs.img -- initramfs (~1.1 MB)
 ```
 
 Build dependencies (Debian/Ubuntu):
@@ -182,7 +182,7 @@ apt install build-essential flex bison bc libelf-dev libssl-dev busybox-static
 ```
 
 Optional OCI artifacts: `bash scripts/build-kernel-oci.sh` packages the
-kernel + initramfs as `tenkei-kernel:<ver>` for downstream multi-stage
+kernel + initramfs as `gemet-kernel:<ver>` for downstream multi-stage
 consumption, and `sudo bash rootfs/build-yggdrasil.sh` produces the
 companion `yggdrasil:<ver>` minimal Debian userland. See
 [docs/kernel-as-oci.md](docs/kernel-as-oci.md) and
@@ -197,7 +197,7 @@ sudo bash scripts/create-test-rootfs.sh /tmp/test-rootfs
 # 2. Boot it
 sudo bash scripts/test-boot.sh \
     --kernel build/vmlinuz \
-    --initrd build/tenkei-initramfs.img \
+    --initrd build/gemet-initramfs.img \
     --rootfs /tmp/test-rootfs
 
 # 3. SSH in (from another terminal)
@@ -263,11 +263,12 @@ Tagged releases (`v*`) are built automatically by
 `.github/workflows/release.yml`. Each release publishes:
 
 - **GitHub Release attachments** at
-  `github.com/doctorjei/tenkei/releases` — `vmlinuz`,
-  `tenkei-initramfs.img`, `{yggdrasil,bifrost,canopy}-<ver>.{txz,qcow2}`
+  `github.com/doctorjei/gemet/releases` — `vmlinuz`,
+  `gemet-initramfs.img`, `{yggdrasil,bifrost,canopy}-<ver>.{txz,qcow2}`
   (rootfs tarballs are xz-compressed with the canonical `.txz`
   extension; build scripts emit `.txz` locally too), and xz-compressed
-  OCI archives (`-oci.txz`) for all four images.
+  OCI archives (`-oci.txz`) for all three rootfs images plus
+  `gemet-boot-<ver>-oci.txz` for the kernel.
 - **OCI images on GHCR** —
   `ghcr.io/doctorjei/gemet/{yggdrasil,bifrost,canopy,boot}:<ver>`
   (all also tagged `:latest`). The kernel image publishes as `boot`;

@@ -9,7 +9,7 @@
 #
 # Expected build context:
 #   vmlinuz         — tenkei kernel (from build/vmlinuz)
-#   initramfs.img   — tenkei initramfs (from build/tenkei-initramfs.img,
+#   initramfs.img   — tenkei initramfs (from build/gemet-initramfs.img,
 #                     renamed during staging)
 #
 # Built by scripts/build-kernel-oci.sh.

@@ -279,8 +279,8 @@ jobs:
           # Compile path: overwrites what build-kernel.sh's install
           # phase staged, but the content is identical (build.sh is
           # the source of truth for both).
-          bash initramfs/build.sh build/tenkei-initramfs.img
-          ls -l build/tenkei-initramfs.img
+          bash initramfs/build.sh build/gemet-initramfs.img
+          ls -l build/gemet-initramfs.img
 
       - name: Verify final kernel + initramfs
         shell: bash
@@ -288,8 +288,8 @@ jobs:
           set -euo pipefail
           file build/vmlinuz | grep -q 'Linux kernel' \
             || { echo "ERROR: build/vmlinuz is not a Linux kernel image"; exit 1; }
-          [[ -s build/tenkei-initramfs.img ]] \
-            || { echo "ERROR: build/tenkei-initramfs.img missing or empty"; exit 1; }
+          [[ -s build/gemet-initramfs.img ]] \
+            || { echo "ERROR: build/gemet-initramfs.img missing or empty"; exit 1; }
           echo "Kernel acquisition path: ${{ steps.kata-check.outputs.kata_ok == 'true' && 'Kata prebuilt fetch' || 'local compile fallback' }}"
 
       - name: Build yggdrasil rootfs (.txz + qcow2 + OCI import)
@@ -334,8 +334,8 @@ jobs:
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
           bash scripts/build-kernel-oci.sh "$VERSION"
-          podman image exists "localhost/tenkei-kernel:${VERSION}" \
-            || { echo "ERROR: tenkei-kernel OCI image was not built"; exit 1; }
+          podman image exists "localhost/gemet-kernel:${VERSION}" \
+            || { echo "ERROR: gemet-kernel OCI image was not built"; exit 1; }
 
       - name: Export OCI archives
         shell: bash
@@ -352,13 +352,13 @@ jobs:
             -o "build/canopy-${VERSION}-oci.tar" \
             "localhost/canopy:${VERSION}"
           podman save --format=oci-archive \
-            -o "build/tenkei-kernel-${VERSION}-oci.tar" \
-            "localhost/tenkei-kernel:${VERSION}"
+            -o "build/gemet-boot-${VERSION}-oci.tar" \
+            "localhost/gemet-kernel:${VERSION}"
           ls -l \
             "build/yggdrasil-${VERSION}-oci.tar" \
             "build/bifrost-${VERSION}-oci.tar" \
             "build/canopy-${VERSION}-oci.tar" \
-            "build/tenkei-kernel-${VERSION}-oci.tar"
+            "build/gemet-boot-${VERSION}-oci.tar"
 
       - name: Tier 1 — structural tests
         shell: bash
@@ -476,9 +476,9 @@ jobs:
           podman push "ghcr.io/doctorjei/gemet/canopy:${VERSION}"
           podman push "ghcr.io/doctorjei/gemet/canopy:latest"
 
-          podman tag "localhost/tenkei-kernel:${VERSION}" \
+          podman tag "localhost/gemet-kernel:${VERSION}" \
             "ghcr.io/doctorjei/gemet/boot:${VERSION}"
-          podman tag "localhost/tenkei-kernel:${VERSION}" \
+          podman tag "localhost/gemet-kernel:${VERSION}" \
             "ghcr.io/doctorjei/gemet/boot:latest"
           podman push "ghcr.io/doctorjei/gemet/boot:${VERSION}"
           podman push "ghcr.io/doctorjei/gemet/boot:latest"
@@ -500,7 +500,7 @@ jobs:
             "build/yggdrasil-${VERSION}-oci.tar" \
             "build/bifrost-${VERSION}-oci.tar" \
             "build/canopy-${VERSION}-oci.tar" \
-            "build/tenkei-kernel-${VERSION}-oci.tar"
+            "build/gemet-boot-${VERSION}-oci.tar"
           do
             [[ -f "$a" ]] || { echo "ERROR: missing $a"; exit 1; }
             # -k keeps the original .tar in place for intra-workflow use.
@@ -511,7 +511,7 @@ jobs:
             "build/yggdrasil-${VERSION}-oci.txz" \
             "build/bifrost-${VERSION}-oci.txz" \
             "build/canopy-${VERSION}-oci.txz" \
-            "build/tenkei-kernel-${VERSION}-oci.txz"
+            "build/gemet-boot-${VERSION}-oci.txz"
 
       - name: Create GitHub Release (on tagged version)
         if: steps.ver.outputs.is_tag_push == 'true'
@@ -528,7 +528,7 @@ jobs:
 
           ASSETS=(
             "build/vmlinuz"
-            "build/tenkei-initramfs.img"
+            "build/gemet-initramfs.img"
             "build/yggdrasil-${VERSION}.txz"
             "build/yggdrasil-${VERSION}.qcow2"
             "build/yggdrasil-${VERSION}-oci.txz"
@@ -538,7 +538,7 @@ jobs:
             "build/canopy-${VERSION}.txz"
             "build/canopy-${VERSION}.qcow2"
             "build/canopy-${VERSION}-oci.txz"
-            "build/tenkei-kernel-${VERSION}-oci.txz"
+            "build/gemet-boot-${VERSION}-oci.txz"
           )
           for a in "${ASSETS[@]}"; do
             [[ -f "$a" ]] || { echo "ERROR: missing release asset: $a"; exit 1; }
@@ -602,7 +602,7 @@ jobs:
           echo "Built + tested artifacts:"
           ls -l \
             build/vmlinuz \
-            build/tenkei-initramfs.img \
+            build/gemet-initramfs.img \
             "build/yggdrasil-${VERSION}.txz" \
             "build/yggdrasil-${VERSION}.qcow2" \
             "build/yggdrasil-${VERSION}-oci.tar" \
@@ -612,4 +612,4 @@ jobs:
             "build/canopy-${VERSION}.txz" \
             "build/canopy-${VERSION}.qcow2" \
             "build/canopy-${VERSION}-oci.tar" \
-            "build/tenkei-kernel-${VERSION}-oci.tar"
+            "build/gemet-boot-${VERSION}-oci.tar"

@@ -9,7 +9,7 @@
 #   build.sh [output-path]
 #
 # Arguments:
-#   output-path   Path for the output image (default: initramfs/tenkei-initramfs.img)
+#   output-path   Path for the output image (default: initramfs/gemet-initramfs.img)
 #
 # Requirements:
 #   busybox-static (Debian/Ubuntu: apt install busybox-static)
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_OUTPUT="${SCRIPT_DIR}/tenkei-initramfs.img"
+DEFAULT_OUTPUT="${SCRIPT_DIR}/gemet-initramfs.img"
 
 # ─── Helpers ───────────────────────────────────────────────────────
 
