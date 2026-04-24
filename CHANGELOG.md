@@ -4,6 +4,27 @@ All notable changes to Tenkei are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); Tenkei
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] — 2026-04-24
+
+### Changed
+- Release pipeline now publishes OCI images to
+  `ghcr.io/doctorjei/gemet/{yggdrasil,bifrost,canopy,boot}:<ver>` (and
+  `:latest`). The kernel package renamed from `tenkei-kernel` to
+  `boot` with the namespace switch. No code or artifact internals
+  changed — this is a GHCR-publishing move to a new registry
+  namespace preparatory to the Gemet rename landing in v2.0.0.
+- Docs (`README.md`, `docs/{kernel-as-oci,releases,user-guide,
+  yggdrasil,canopy}.md`) updated to reference the new GHCR paths.
+
+### Notes
+- Versions 1.0.0 – 1.5.0 remain pullable at their original
+  `ghcr.io/doctorjei/tenkei/{yggdrasil,bifrost,canopy,tenkei-kernel}`
+  tags. No force-push or retagging of the old namespace.
+- Local build targets (`localhost/tenkei-kernel`, `localhost/yggdrasil`
+  etc.) and release-attachment filenames (`tenkei-initramfs.img`,
+  `tenkei-kernel-<ver>-oci.txz`) are unchanged; they move when the
+  full internal rename lands in v2.0.0.
+
 ## [1.5.0] — 2026-04-23
 
 ### Added
@@ -152,6 +173,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Initial production release.
 
+[1.5.1]: https://github.com/doctorjei/tenkei/releases/tag/v1.5.1
 [1.5.0]: https://github.com/doctorjei/tenkei/releases/tag/v1.5.0
 [1.4.2]: https://github.com/doctorjei/tenkei/releases/tag/v1.4.2
 [1.4.1]: https://github.com/doctorjei/tenkei/releases/tag/v1.4.1
