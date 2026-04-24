@@ -2,7 +2,6 @@
 Description=Generate SSH host keys if missing
 Before=ssh.service ssh.socket
 After=local-fs.target
-ConditionPathExists=/usr/bin/ssh-keygen
 
 [Service]
 Type=oneshot

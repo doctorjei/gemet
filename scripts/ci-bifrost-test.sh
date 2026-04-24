@@ -362,6 +362,18 @@ else
     fail "no SSH host keys present in /etc/ssh/ (bifrost-hostkeys.service did not fire?)"
     podman exec "$CONTAINER_NAME" \
         /bin/sh -c 'ls -la /etc/ssh/ 2>&1 || true' >&2 2>&1 || true
+    warn "bifrost-hostkeys.service status (active/skip/fail diagnostic):"
+    podman exec "$CONTAINER_NAME" \
+        systemctl status --no-pager --lines=20 bifrost-hostkeys.service >&2 2>&1 || true
+    warn "ssh-keygen path probe (ConditionPathExists=/usr/bin/ssh-keygen):"
+    podman exec "$CONTAINER_NAME" \
+        /bin/sh -c 'ls -la /usr/bin/ssh-keygen /usr/sbin/ssh-keygen 2>&1 || true; command -v ssh-keygen 2>&1 || true' >&2 2>&1 || true
+    warn "bifrost-hostkeys.service enablement (multi-user.target.wants symlink):"
+    podman exec "$CONTAINER_NAME" \
+        /bin/sh -c 'ls -la /etc/systemd/system/multi-user.target.wants/bifrost-hostkeys.service 2>&1 || true' >&2 2>&1 || true
+    warn "recent journal entries for bifrost-hostkeys.service:"
+    podman exec "$CONTAINER_NAME" \
+        journalctl -u bifrost-hostkeys.service --no-pager -n 30 >&2 2>&1 || true
 fi
 echo ""
 
