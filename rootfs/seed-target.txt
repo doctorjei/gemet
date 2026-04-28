@@ -220,8 +220,10 @@ perl-base
 procps
 psmisc
 python-apt-common
+python-is-python3
 python3
 python3-apt
+python3-argcomplete
 python3-attr
 python3-bcrypt
 python3-blinker
