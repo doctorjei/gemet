@@ -1,8 +1,39 @@
 # Changelog
 
-All notable changes to Tenkei are documented here. Format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); Tenkei
+All notable changes to Gemet are documented here. Format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); Gemet
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.6.0] — 2026-04-28
+
+### Added
+- Gemet-side kernel config overlay at `kernel/config/<arch>/gemet.conf`,
+  applied on top of Kata's fragments via `merge_config.sh` +
+  `make olddefconfig`. Initial overlay sets `CONFIG_INPUT_EVDEV=y`
+  so userspace receives ACPI events (e.g. systemd-logind reacts to
+  `qm shutdown` on PVE). Kata's target use case (kata-agent over
+  vsock) doesn't need this; gemet's consumers do.
+- `python-is-python3` and `python3-argcomplete` to `seed-target.txt`.
+  ~210 KB combined; provides `/usr/bin/python` symlink and
+  bash-completion for Python CLIs.
+
+### Changed
+- `python3-yaml`, `python3-requests`, `python3-urllib3`,
+  `python3-jinja2` (and transitives `python3-certifi`,
+  `python3-idna`, `python3-charset-normalizer`,
+  `python3-markupsafe`) are no longer purged in Phase 4 of the
+  yggdrasil build. ~2–3 MB uncompressed retained in the base image,
+  inherited by bifrost + canopy. Single source of truth for
+  consumers running Python tooling.
+- Release CI no longer fetches Kata's prebuilt `vmlinuz`. The
+  pipeline always compiles the kernel locally (with the gemet
+  overlay applied) and caches the result via `actions/cache@v4`
+  keyed on a hash of all kernel-relevant inputs (Kata fragments,
+  Kata patches, gemet overlay, build scripts). Cache hit ≈ 30–40 s;
+  cache miss ≈ 8–10 min cold compile.
+- `docs/kernel-as-oci.md` and `README.md` qualify the "kernel
+  interchangeable with any Kata build" claim — gemet kernels now
+  diverge by exactly the overlay.
 
 ## [1.5.1] — 2026-04-24
 
