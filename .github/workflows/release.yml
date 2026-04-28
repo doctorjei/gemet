@@ -6,11 +6,11 @@ name: release
 #   - push of a tag matching "v*"          -> real release (artifacts + GHCR push + GitHub Release)
 #   - workflow_dispatch (manual)           -> build + test only (no GHCR push, no Release)
 #
-# Kernel acquisition: tries Kata's prebuilt kernel first (fast path,
-# ~seconds once the release is cached). Falls back to local compile
-# via scripts/build-kernel.sh if any fetch step fails (upstream 404,
-# regex miss, corrupt asset, etc.). Cold-cache fetch is ~30 s; cold
-# compile fallback is ~8-10 min with actions/cache warming later runs.
+# Kernel acquisition: always compile locally via scripts/build-kernel.sh
+# so the gemet config overlay (kernel/config/<arch>/gemet.conf) lands
+# on top of Kata's fragments. Cold compile is ~8-10 min on a GH runner;
+# warm runs hit actions/cache (keyed on kernel-relevant inputs) in
+# seconds.
 #
 # Releases that touch kernel/initramfs code paths are created as DRAFTS
 # with a pre-publish checklist; a human must run yggdrasil-smoke-test.sh
@@ -24,12 +24,8 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      kata_release:
-        description: 'Kata Containers release tag to fetch kernel from (blank = latest)'
-        required: false
-        default: ''
       kernel_version:
-        description: 'Kernel version for the local-compile fallback path (used only if the Kata prebuilt fetch fails)'
+        description: 'Kernel version to compile (overrides default 6.18.15)'
         required: false
         default: '6.18.15'
 
@@ -42,10 +38,8 @@ jobs:
     name: Build, test, publish
     runs-on: ubuntu-24.04
     env:
-      # Overridable via workflow_dispatch input; empty means "use latest".
-      KATA_RELEASE_INPUT: ${{ github.event.inputs.kata_release }}
-      # Fallback-only: kernel version used by scripts/build-kernel.sh if the
-      # Kata prebuilt fetch fails (upstream 404, regex miss, corrupt asset).
+      # Kernel version compiled by scripts/build-kernel.sh. Overridable
+      # via workflow_dispatch; pinned default for tag-triggered runs.
       KERNEL_VERSION: ${{ github.event.inputs.kernel_version || '6.18.15' }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -75,7 +69,6 @@ jobs:
           echo "VERSION=$VERSION"
           echo "TAG=$TAG"
           echo "IS_TAG_PUSH=$IS_TAG_PUSH"
-          echo "KATA_RELEASE_INPUT=${KATA_RELEASE_INPUT:-<latest>}"
           {
             echo "version=$VERSION"
             echo "tag=$TAG"
@@ -101,9 +94,11 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          # tenkei doesn't patch the kernel, so we fetch Kata's prebuilt
-          # binary rather than compiling one. This drops build-essential +
-          # the kernel-specific dev packages entirely.
+          # Common runtime deps for every job path (kernel-cache hit and
+          # cold compile). Kernel-compile-only deps (build-essential,
+          # flex, bison, bc, libelf-dev, libssl-dev) are installed in the
+          # cache-miss branch only — see "Install kernel compile
+          # dependencies" below.
           # - busybox-static, cpio, gzip, xz-utils: initramfs pack + tarball IO
           # - e2fsprogs: debugfs + mkfs.ext4 (yggdrasil rdump + qcow2)
           # - qemu-utils: qemu-img (qcow2 build)
@@ -131,140 +126,37 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       # ────────────────────────────────────────────────────────────────
-      # Kernel acquisition: try Kata prebuilt fetch first (fast path,
-      # ~seconds on cache hit), fall back to local compile (~8-10 min)
-      # if any fetch step fails. Tenkei doesn't patch the kernel
-      # (commit b10a21d), so the two paths are semantically equivalent.
+      # Kernel acquisition: always compile locally so the gemet config
+      # overlay (kernel/config/<arch>/gemet.conf) lands on top of Kata's
+      # fragments. actions/cache stores build/vmlinuz keyed on the
+      # kernel-relevant inputs (kernel version, Kata configs/patches,
+      # gemet overlay, build scripts) — exact-match only, so any change
+      # to those inputs forces a rebuild. Cold compile ≈ 8–10 min;
+      # cache hit ≈ seconds.
       # ────────────────────────────────────────────────────────────────
 
-      - name: Resolve Kata release tag and asset URL
-        id: kata
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -n "${KATA_RELEASE_INPUT}" ]]; then
-            API="https://api.github.com/repos/kata-containers/kata-containers/releases/tags/${KATA_RELEASE_INPUT}"
-          else
-            API="https://api.github.com/repos/kata-containers/kata-containers/releases/latest"
-          fi
-          # Authenticated calls get 5000 req/hour vs 60 anonymous —
-          # GITHUB_TOKEN has public-read scope for any repo.
-          RELEASE_JSON=$(curl -fsSL \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "$API")
-          KATA_RELEASE=$(echo "$RELEASE_JSON" | jq -r .tag_name)
-          [[ -n "$KATA_RELEASE" && "$KATA_RELEASE" != "null" ]] \
-            || { echo "ERROR: could not resolve Kata release tag. Check GH_TOKEN scope and api.github.com reachability. The workflow will fall back to local kernel compile."; exit 1; }
-          # Kata's asset naming: historically .tar.xz with amd64|x86_64 suffix;
-          # as of 3.28.0 it's .tar.zst (zstd) with amd64. Match both so we
-          # don't break when Kata adjusts release packaging.
-          URL=$(echo "$RELEASE_JSON" \
-            | jq -r '.assets[]
-                     | select(.name | test("^kata-static-.*-(amd64|x86_64)\\.tar\\.(xz|zst)$"))
-                     | .browser_download_url' \
-            | head -1)
-          [[ -n "$URL" && "$URL" != "null" ]] \
-            || { echo "ERROR: no kata-static tarball asset found for $KATA_RELEASE. Asset naming may have changed. The workflow will fall back to local kernel compile."; exit 1; }
-          echo "Resolved Kata release: $KATA_RELEASE"
-          echo "Asset URL: $URL"
-          {
-            echo "tag=$KATA_RELEASE"
-            echo "url=$URL"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Restore cached Kata kernel
+      - name: Restore cached gemet kernel
         id: kernel-cache
-        if: steps.kata.outcome == 'success'
         uses: actions/cache@v4
         with:
-          # Cache just build/vmlinuz (~8 MB) — no need to cache the
-          # 1.6 GB tarball. Keyed on the resolved Kata release tag, so
-          # once a given Kata release has been downloaded once, every
-          # subsequent run with the same tag is a cache hit (seconds
-          # vs minutes).
           path: build/vmlinuz
-          key: kata-kernel-${{ steps.kata.outputs.tag }}
+          key: kernel-${{ env.KERNEL_VERSION }}-${{ hashFiles('upstream/kernel/configs/**', 'upstream/kernel/patches/**', 'kernel/config/**', 'scripts/build-kernel.sh', 'upstream/kernel/build-kernel.sh') }}
 
-      - name: Download Kata kernel (cache miss)
-        id: kata-download
-        if: steps.kata.outcome == 'success' && steps.kernel-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          URL="${{ steps.kata.outputs.url }}"
-          # The full kata-static tarball is ~1.6 GB (qemu, cloud-
-          # hypervisor, firecracker, agents, runtime); we only want the
-          # ~8 MB kernel. Download, then extract just the vmlinuz files.
-          mkdir -p build
-          ARCHIVE=/tmp/kata-static.tar
-          curl -fsSL -o "$ARCHIVE" "$URL"
-          case "$URL" in
-            *.zst) TAR_COMP=(--zstd) ;;
-            *.xz)  TAR_COMP=(--xz)   ;;
-            *) echo "ERROR: unknown compression in $URL"; exit 1 ;;
-          esac
-          EXTRACT=/tmp/kata-extract
-          mkdir -p "$EXTRACT"
-          # Extract the vmlinuz symlink AND its target file (versioned
-          # .container binary). `vmlinuz*` matches both; tar preserves
-          # the symlink as a symlink.
-          tar "${TAR_COMP[@]}" -xf "$ARCHIVE" -C "$EXTRACT" \
-            --wildcards './opt/kata/share/kata-containers/vmlinuz*'
-          cp -L "$EXTRACT/opt/kata/share/kata-containers/vmlinuz.container" \
-            build/vmlinuz
-          rm -rf "$ARCHIVE" "$EXTRACT"
-
-      - name: Check Kata kernel artifact
-        id: kata-check
-        shell: bash
-        run: |
-          set -uo pipefail
-          KATA_OK=false
-          if [[ -s build/vmlinuz ]] \
-             && file build/vmlinuz | grep -q 'Linux kernel'; then
-            KATA_OK=true
-            echo "Kata prebuilt kernel is usable."
-            ls -l build/vmlinuz
-          else
-            echo "Kata prebuilt kernel missing or invalid — will fall back to local compile."
-            rm -f build/vmlinuz
-          fi
-          echo "kata_ok=$KATA_OK" >> "$GITHUB_OUTPUT"
-
-      # ── Compile fallback — only runs if Kata fetch failed ──────────
-
-      - name: Install kernel compile dependencies (fallback)
-        if: steps.kata-check.outputs.kata_ok != 'true'
+      - name: Install kernel compile dependencies
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get install -y --no-install-recommends \
             build-essential flex bison bc libelf-dev libssl-dev
 
-      - name: Restore kernel source cache (fallback)
-        if: steps.kata-check.outputs.kata_ok != 'true'
-        uses: actions/cache@v4
-        with:
-          # build-kernel.sh places source at $PWD/kata-linux-<ver>-<config>.
-          # The "<config>" tail is read from upstream/kernel/kata_config_version
-          # and can change across upstream bumps — glob it.
-          path: |
-            kata-linux-${{ env.KERNEL_VERSION }}-*
-            ~/.ccache
-          key: kernel-${{ env.KERNEL_VERSION }}-${{ hashFiles('upstream/kernel/**') }}
-          restore-keys: |
-            kernel-${{ env.KERNEL_VERSION }}-
-
-      - name: Compile kernel locally (fallback)
-        if: steps.kata-check.outputs.kata_ok != 'true'
+      - name: Compile kernel locally
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          echo "Kata prebuilt fetch failed; compiling kernel $KERNEL_VERSION locally."
-          echo "(cold cache ~8-10 min on GH runner; warm cache ~seconds)"
+          echo "Compiling kernel $KERNEL_VERSION (gemet overlay applied on top of Kata fragments)."
+          echo "(cold compile ~8-10 min on GH runner; cached runs hit kernel-cache instead)"
           bash scripts/build-kernel.sh "$KERNEL_VERSION"
           ls -l build/vmlinuz
 
@@ -275,10 +167,10 @@ jobs:
         run: |
           set -euo pipefail
           # Idempotent: rebuilds from initramfs/ source each time.
-          # Fetch path: produces the initramfs (wasn't built before).
-          # Compile path: overwrites what build-kernel.sh's install
-          # phase staged, but the content is identical (build.sh is
-          # the source of truth for both).
+          # Cache-hit path: produces the initramfs (wasn't built since
+          # only build/vmlinuz was cached). Compile path: overwrites
+          # what build-kernel.sh's install phase staged, but the content
+          # is identical (build.sh is the source of truth for both).
           bash initramfs/build.sh build/gemet-initramfs.img
           ls -l build/gemet-initramfs.img
 
@@ -286,11 +178,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          [[ -s build/vmlinuz ]] \
+            || { echo "ERROR: build/vmlinuz is missing or empty after kernel acquisition"; exit 1; }
           file build/vmlinuz | grep -q 'Linux kernel' \
             || { echo "ERROR: build/vmlinuz is not a Linux kernel image"; exit 1; }
           [[ -s build/gemet-initramfs.img ]] \
             || { echo "ERROR: build/gemet-initramfs.img missing or empty"; exit 1; }
-          echo "Kernel acquisition path: ${{ steps.kata-check.outputs.kata_ok == 'true' && 'Kata prebuilt fetch' || 'local compile fallback' }}"
+          echo "Kernel acquisition path: ${{ steps.kernel-cache.outputs.cache-hit == 'true' && 'cache hit (build/vmlinuz restored)' || 'local compile' }}"
 
       - name: Build yggdrasil rootfs (.txz + qcow2 + OCI import)
         shell: bash

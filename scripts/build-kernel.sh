@@ -123,6 +123,30 @@ SHIMPATCH
 
 # ─── Install artifacts ─────────────────────────────────────────────
 
+apply_gemet_overlay() {
+    local ver="$1"
+    local karch="$2"
+    local config_version
+    config_version="$(cat "${UPSTREAM_KERNEL}/kata_config_version")"
+
+    local kernel_path="${PWD}/kata-linux-${ver}-${config_version}"
+    [[ -d "$kernel_path" ]] || error "Kernel source not found: ${kernel_path}" \
+        "— overlay step expects upstream setup to have completed first."
+
+    # Apply gemet config overlay on top of Kata's fragments
+    local gemet_frag="${REPO_ROOT}/kernel/config/${karch}/gemet.conf"
+    if [[ -f "$gemet_frag" ]]; then
+        info "Applying gemet config overlay: $(basename "$gemet_frag")"
+        (
+            cd "$kernel_path"
+            bash scripts/kconfig/merge_config.sh -m .config "$gemet_frag"
+            make olddefconfig
+        )
+    else
+        info "No gemet fragment for arch=${karch}; using Kata config as-is"
+    fi
+}
+
 install_tenkei() {
     local ver="$1"
     local karch="$2"
@@ -210,6 +234,7 @@ case "$subcmd" in
         info "Setting up kernel source..."
         bash "${UPSTREAM_KERNEL}/build-kernel.sh" \
             -v "$version" -a "$arch" setup
+        apply_gemet_overlay "$version" "$arch"
         ;;
     build)
         config_version="$(cat "${UPSTREAM_KERNEL}/kata_config_version")"
@@ -227,6 +252,7 @@ case "$subcmd" in
         info "Setting up kernel source..."
         bash "${UPSTREAM_KERNEL}/build-kernel.sh" \
             -v "$version" -a "$arch" setup
+        apply_gemet_overlay "$version" "$arch"
         info "Building kernel..."
         bash "${UPSTREAM_KERNEL}/build-kernel.sh" \
             -v "$version" -a "$arch" build

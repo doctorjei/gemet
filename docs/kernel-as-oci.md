@@ -102,25 +102,39 @@ Downstream consumers that need a specific kernel version should pin on
 Gemet's `VERSION` — this pins the kernel version that Gemet's build
 scripts are wired up against for that release.
 
-## Interchangeability with Kata kernels
+## Relationship to Kata kernels
 
-Gemet does not patch or specialize the kernel. `scripts/build-kernel.sh`
-is a thin wrapper around upstream Kata's builder that uses Kata's stock
-config fragments unmodified. The resulting `vmlinuz` is functionally
-equivalent to any Kata Containers kernel built for the same version with
-the same fragment set.
+Gemet's kernel is built from upstream Kata's tree (configs + patches)
+plus a thin gemet-side config overlay. `scripts/build-kernel.sh` runs
+Kata's `setup` step to merge Kata's fragments, then layers
+`kernel/config/<arch>/gemet.conf` on top via `merge_config.sh -m` and a
+final `make olddefconfig` before the build proceeds.
 
-Practical consequence: if you have a Kata kernel binary on hand (from a
-kata-containers release, an OCI image they publish, or a previous Gemet
-build), you can drop it in at `build/vmlinuz` and skip the local kernel
-compile entirely. The required configs — `CONFIG_VIRTIO_FS`,
-`CONFIG_FUSE_DAX`, `CONFIG_VIRTIO_BLK`, `CONFIG_EXT4_FS`, plus the rest
-of Kata's `common/` fragment — are already on by default in any Kata
-build, so no per-fragment auditing is needed.
+Currently the overlay sets a single option:
 
-This also means Gemet's kernel is not a long-lived artifact in any
-meaningful sense — bumping to a newer Kata kernel version is the same
-operation as building one for the first time.
+```
+CONFIG_INPUT_EVDEV=y
+```
+
+This exists because Kata's target use case (kata-agent over vsock)
+doesn't need userspace ACPI event delivery, so their fragments leave
+`CONFIG_INPUT_EVDEV` unset. Gemet's consumers (e.g. PVE `qm shutdown`,
+which sends an ACPI power-button press over QMP) need `/dev/input/event*`
+to exist so `systemd-logind` can react — without it, ACPI events are
+dropped and the host falls back to forceStop after a timeout.
+
+Practical consequence: gemet's `vmlinuz` is binary-compatible with the
+boot interface Kata exposes (same kernel version, same Kata configs and
+patches as the foundation), but the resulting `.config` differs by the
+overlay above. A Kata-published kernel binary is not a drop-in
+substitute — it lacks the gemet overlay's options and would reintroduce
+the bugs the overlay fixes. Always build via `scripts/build-kernel.sh`
+(or pull from `ghcr.io/doctorjei/gemet/boot:<ver>`).
+
+The overlay is intentionally minimal — only what Kata doesn't provide
+that gemet specifically needs. Bumping the kernel version is the same
+operation as building one for the first time; the overlay is reapplied
+automatically by the build script.
 
 ## Why OCI
 

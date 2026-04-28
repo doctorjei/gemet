@@ -155,13 +155,15 @@ two projects solve different problems:
 - `kata-runtime` -- replaced by kento's VM management
 - containerd shim -- not needed; kento talks to QEMU directly
 
-**Kernel interchangeability:** Gemet does not patch or specialize the
-kernel. `scripts/build-kernel.sh` is a thin wrapper around upstream Kata's
-builder using Kata's stock config fragments unmodified, so a Gemet
-`vmlinuz` is functionally equivalent to any Kata Containers kernel built
-for the same version. If you have a Kata kernel binary on hand (release
-artifact, OCI image, or prior build), you can drop it in at
-`build/vmlinuz` and skip the local compile.
+**Kernel relationship to Kata:** `scripts/build-kernel.sh` wraps Kata's
+upstream builder and applies Kata's config fragments and patches as-is,
+then layers a thin gemet-side config overlay (`kernel/config/<arch>/gemet.conf`)
+on top via `merge_config.sh` + `make olddefconfig`. The overlay
+currently adds `CONFIG_INPUT_EVDEV=y` so userspace receives ACPI events
+(needed for `qm shutdown` on PVE and similar host-driven shutdowns —
+Kata's vsock-based agent flow doesn't). Gemet `vmlinuz` is binary-
+compatible with Kata's at the boot interface but no longer drop-in
+identical with Kata's published binaries — the `.config` differs.
 
 The upstream Kata code lives in `upstream/` as git subtrees. Changes to these
 files are not committed — they are overwritten on the next upstream sync.
