@@ -4,6 +4,22 @@ All notable changes to Gemet are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); Gemet
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] — 2026-04-29
+
+### Fixed
+- v1.6.0 advertised retaining `python3-requests` and adding
+  `python-is-python3` + `python3-argcomplete` to the base image, but
+  none of the three actually shipped: `seed-target.txt` is a
+  keep-list (`apt-mark manual` to defeat autoremove cascades), not an
+  install-list. Packages not already in the Debian 13 genericcloud
+  baseline are silently skipped. Add an `EXTRA_INSTALL_PACKAGES`
+  array in `rootfs/build-yggdrasil.sh` that explicitly
+  `apt-get install`s these three during Phase 0. The other 7
+  `python3-*` keepers from v1.6.0 (`yaml`, `jinja2`, `urllib3`,
+  `certifi`, `idna`, `charset-normalizer`, `markupsafe`) were
+  already in the baseline and shipped correctly in v1.6.0; nothing
+  changes for them.
+
 ## [1.6.0] — 2026-04-28
 
 ### Added
