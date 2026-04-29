@@ -8,9 +8,13 @@ independently from its parent project
 [kento](https://github.com/doctorjei/kento); kento pulls Gemet
 artifacts like any other downstream consumer.
 
-Releases are cut from tags matching `v*` (e.g. `v1.2.0`) — pushing such a tag
-triggers `.github/workflows/release.yml`, which builds every artifact form,
-runs structural and systemd-in-OCI health checks, and publishes the release.
+Releases use an **rc-then-promote** flow (since v1.6.0). Push a
+release-candidate tag (`v<ver>-rc<n>`) to trigger the build +
+test + GHCR push (rc-suffixed only) + DRAFT release. Once the rc
+is verified, push the matching plain tag (`v<ver>`) to trigger
+the promote job: skopeo-copy rc images to `:<ver>` + `:latest`,
+flip the rc draft to published. See "How to trigger a release"
+below.
 
 ## Artifact inventory (per release)
 
@@ -126,13 +130,34 @@ step via a self-hosted or KVM-enabled runner.
 
 ## How to trigger a release
 
+Gemet uses an **rc-then-promote** pattern (since v1.6.0). Two tags
+per release:
+
 ```bash
-git tag -a v1.2.0 -m "Release v1.2.0"
-git push origin v1.2.0
+# 1. Tag a release candidate. Builds, runs Tier 1/2, pushes
+#    GHCR with rc suffix only (`:<ver>-rc1`), creates DRAFT release.
+git tag -a v1.6.3-rc1 -m "Release candidate v1.6.3-rc1"
+git push origin v1.6.3-rc1
+
+# 2. After verifying the rc on a test host, tag the release. NO
+#    rebuild — the workflow skopeo-copies the rc images to
+#    `:<ver>` and `:latest`, then flips the rc draft to published.
+git tag -a v1.6.3 -m "Release v1.6.3"
+git push origin v1.6.3
 ```
 
-The workflow does the rest. Expect ~25-30 min on a cold kernel cache,
-a few minutes on a warm cache.
+The rc tag is mutable (force-pushable) under the `v*-rc*` exclusion
+in the tag protection rule, so a broken rc can be fixed and re-
+pushed without bumping the rc number. The release tag is immutable.
+
+If your first rc fails CI, fix the source and either force-push the
+same `-rc1` tag or push a fresh `-rc2` (preference: bump for
+clarity in the audit trail). Only push the plain release tag once
+the corresponding rc has gone fully green AND has been verified on
+a test host (e.g. PVE droste box for VM smoke testing).
+
+Expect ~25-30 min on a cold kernel cache for the rc build; the
+promote step is ~1-2 min (skopeo copy + draft edit, no rebuild).
 
 ## Testing the pipeline without publishing
 
