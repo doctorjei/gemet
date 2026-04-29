@@ -3,8 +3,17 @@ name: release
 # Tag-triggered release workflow for tenkei (Minimal tier).
 #
 # Trigger:
-#   - push of a tag matching "v*"          -> real release (artifacts + GHCR push + GitHub Release)
-#   - workflow_dispatch (manual)           -> build + test only (no GHCR push, no Release)
+#   - push of an RC tag matching "v<ver>-rc<n>" -> build + test + GHCR push
+#                                                  to rc-suffixed tag only +
+#                                                  DRAFT GitHub Release
+#   - push of a release tag matching "v<ver>"   -> NO rebuild; skopeo-copy
+#                                                  the latest matching rc
+#                                                  images to :<ver> and
+#                                                  :latest, then flip the
+#                                                  rc draft release to
+#                                                  published as "v<ver>"
+#   - workflow_dispatch (manual)                -> build + test only
+#                                                  (no GHCR push, no Release)
 #
 # Kernel acquisition: always compile locally via scripts/build-kernel.sh
 # so the gemet config overlay (kernel/config/<arch>/gemet.conf) lands
@@ -14,7 +23,9 @@ name: release
 #
 # Releases that touch kernel/initramfs code paths are created as DRAFTS
 # with a pre-publish checklist; a human must run yggdrasil-smoke-test.sh
-# on a KVM-capable host before flipping the draft to published.
+# on a KVM-capable host before flipping the draft to published. The
+# rc-then-promote pattern means every rc release is already a draft,
+# so this checklist piggybacks on the existing draft mechanism.
 #
 # See playbook plan: ~/playbook/plans/github-ci.md (Phase 3).
 
@@ -34,9 +45,15 @@ permissions:
   packages: write   # push OCI images to GHCR
 
 jobs:
-  release:
-    name: Build, test, publish
+  # ──────────────────────────────────────────────────────────────────────
+  # build-and-rc: runs on workflow_dispatch OR on an rc tag (vX.Y.Z-rcN).
+  # Skips itself entirely on release tags (vX.Y.Z) — the promote job
+  # handles those without rebuilding.
+  # ──────────────────────────────────────────────────────────────────────
+  build-and-rc:
+    name: Build, test, rc-publish
     runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.ref_name, '-rc'))
     env:
       # Kernel version compiled by scripts/build-kernel.sh. Overridable
       # via workflow_dispatch; pinned default for tag-triggered runs.
@@ -49,34 +66,73 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Detect tag shape (rc vs release vs dispatch)
+        id: shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          IS_RC=false
+          IS_RELEASE=false
+          IS_DISPATCH=false
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            IS_DISPATCH=true
+          elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$ ]]; then
+            IS_RC=true
+          elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            IS_RELEASE=true
+          else
+            echo "ERROR: tag '${{ github.ref_name }}' matches neither v<ver>-rc<n> nor v<ver>" >&2
+            exit 1
+          fi
+          echo "IS_RC=$IS_RC"
+          echo "IS_RELEASE=$IS_RELEASE"
+          echo "IS_DISPATCH=$IS_DISPATCH"
+          {
+            echo "is_rc=$IS_RC"
+            echo "is_release=$IS_RELEASE"
+            echo "is_dispatch=$IS_DISPATCH"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Derive version and tag
         id: ver
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          IS_RC="${{ steps.shape.outputs.is_rc }}"
+          IS_DISPATCH="${{ steps.shape.outputs.is_dispatch }}"
+          if [[ "$IS_RC" == "true" ]]; then
+            # RC tag: ref_name is v<ver>-rc<n>. Strip leading v for
+            # full rc-version (e.g. 1.6.2-rc1); strip trailing -rcN
+            # for the underlying release version (e.g. 1.6.2).
             TAG="${{ github.ref_name }}"
-            VERSION="${TAG#v}"
+            RC_VERSION="${TAG#v}"             # 1.6.2-rc1
+            VERSION="${RC_VERSION%-rc*}"      # 1.6.2
             IS_TAG_PUSH=true
-          else
-            # workflow_dispatch: derive from VERSION file, synthesize tag
-            # for log context only — we do NOT push a tag or create a release.
+          elif [[ "$IS_DISPATCH" == "true" ]]; then
+            # workflow_dispatch: derive from VERSION file. No rc suffix
+            # (we never push to GHCR on dispatch).
             VERSION="$(tr -d '[:space:]' < VERSION)"
+            RC_VERSION="$VERSION"
             TAG="v${VERSION}"
             IS_TAG_PUSH=false
+          else
+            echo "ERROR: build-and-rc reached without rc/dispatch shape" >&2
+            exit 1
           fi
           [[ -n "$VERSION" ]] || { echo "ERROR: empty VERSION"; exit 1; }
           echo "VERSION=$VERSION"
+          echo "RC_VERSION=$RC_VERSION"
           echo "TAG=$TAG"
           echo "IS_TAG_PUSH=$IS_TAG_PUSH"
           {
             echo "version=$VERSION"
+            echo "rc_version=$RC_VERSION"
             echo "tag=$TAG"
             echo "is_tag_push=$IS_TAG_PUSH"
           } >> "$GITHUB_OUTPUT"
 
       - name: Gate — VERSION matches tag
-        if: steps.ver.outputs.is_tag_push == 'true'
+        if: steps.shape.outputs.is_rc == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -301,9 +357,9 @@ jobs:
             --oci-archive="build/canopy-${VERSION}-oci.tar" \
             --version="$VERSION"
 
-      - name: Compute boot-path change [requires VM smoke test] (on tagged version)
+      - name: Compute boot-path change [requires VM smoke test] (on rc tag)
         id: bootcheck
-        if: steps.ver.outputs.is_tag_push == 'true'
+        if: steps.shape.outputs.is_rc == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -334,51 +390,44 @@ jobs:
             echo "change_reason=$CHANGE_REASON"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Log in to GHCR (on tagged version)
-        if: steps.ver.outputs.is_tag_push == 'true'
+      - name: Log in to GHCR (on rc tag)
+        if: steps.shape.outputs.is_rc == 'true'
         shell: bash
         run: |
           set -euo pipefail
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Tag and push OCI images to GHCR (on tagged version)
-        if: steps.ver.outputs.is_tag_push == 'true'
+      - name: Tag and push OCI images to GHCR with rc suffix only (on rc tag)
+        if: steps.shape.outputs.is_rc == 'true'
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
+          RC_VERSION="${{ steps.ver.outputs.rc_version }}"
+          # rc tag flow: push ONLY the rc-suffixed tag (e.g. :1.6.2-rc1).
+          # We do NOT push :<ver> or :latest here — those get populated
+          # by the promote job via skopeo copy when the release tag
+          # (v<ver>) is pushed.
 
           podman tag "localhost/yggdrasil:${VERSION}" \
-            "ghcr.io/doctorjei/gemet/yggdrasil:${VERSION}"
-          podman tag "localhost/yggdrasil:${VERSION}" \
-            "ghcr.io/doctorjei/gemet/yggdrasil:latest"
-          podman push "ghcr.io/doctorjei/gemet/yggdrasil:${VERSION}"
-          podman push "ghcr.io/doctorjei/gemet/yggdrasil:latest"
+            "ghcr.io/doctorjei/gemet/yggdrasil:${RC_VERSION}"
+          podman push "ghcr.io/doctorjei/gemet/yggdrasil:${RC_VERSION}"
 
           podman tag "localhost/bifrost:${VERSION}" \
-            "ghcr.io/doctorjei/gemet/bifrost:${VERSION}"
-          podman tag "localhost/bifrost:${VERSION}" \
-            "ghcr.io/doctorjei/gemet/bifrost:latest"
-          podman push "ghcr.io/doctorjei/gemet/bifrost:${VERSION}"
-          podman push "ghcr.io/doctorjei/gemet/bifrost:latest"
+            "ghcr.io/doctorjei/gemet/bifrost:${RC_VERSION}"
+          podman push "ghcr.io/doctorjei/gemet/bifrost:${RC_VERSION}"
 
           podman tag "localhost/canopy:${VERSION}" \
-            "ghcr.io/doctorjei/gemet/canopy:${VERSION}"
-          podman tag "localhost/canopy:${VERSION}" \
-            "ghcr.io/doctorjei/gemet/canopy:latest"
-          podman push "ghcr.io/doctorjei/gemet/canopy:${VERSION}"
-          podman push "ghcr.io/doctorjei/gemet/canopy:latest"
+            "ghcr.io/doctorjei/gemet/canopy:${RC_VERSION}"
+          podman push "ghcr.io/doctorjei/gemet/canopy:${RC_VERSION}"
 
           podman tag "localhost/gemet-kernel:${VERSION}" \
-            "ghcr.io/doctorjei/gemet/boot:${VERSION}"
-          podman tag "localhost/gemet-kernel:${VERSION}" \
-            "ghcr.io/doctorjei/gemet/boot:latest"
-          podman push "ghcr.io/doctorjei/gemet/boot:${VERSION}"
-          podman push "ghcr.io/doctorjei/gemet/boot:latest"
+            "ghcr.io/doctorjei/gemet/boot:${RC_VERSION}"
+          podman push "ghcr.io/doctorjei/gemet/boot:${RC_VERSION}"
 
-      - name: Compress OCI archives for release attachment (on tagged version)
-        if: steps.ver.outputs.is_tag_push == 'true'
+      - name: Compress OCI archives for release attachment (on rc tag)
+        if: steps.shape.outputs.is_rc == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -407,14 +456,15 @@ jobs:
             "build/canopy-${VERSION}-oci.txz" \
             "build/gemet-boot-${VERSION}-oci.txz"
 
-      - name: Create GitHub Release (on tagged version)
-        if: steps.ver.outputs.is_tag_push == 'true'
+      - name: Create DRAFT GitHub Release for rc (on rc tag)
+        if: steps.shape.outputs.is_rc == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
+          RC_VERSION="${{ steps.ver.outputs.rc_version }}"
           TAG="${{ steps.ver.outputs.tag }}"
           BOOT_TEST_REQUIRED="${{ steps.bootcheck.outputs.boot_test_required }}"
           CHANGE_REASON="${{ steps.bootcheck.outputs.change_reason }}"
@@ -438,55 +488,70 @@ jobs:
             [[ -f "$a" ]] || { echo "ERROR: missing release asset: $a"; exit 1; }
           done
 
+          # Every rc release is a draft by design (rc-then-promote).
+          # The boot-path check still runs so the checklist body can be
+          # surfaced when relevant.
+          BODY=/tmp/release-body.md
+          # Note: YAML's block-scalar strips the common leading indent,
+          # so by the time bash runs this heredoc the content is flush-left.
           if [[ "$BOOT_TEST_REQUIRED" == "true" ]]; then
-            echo "Creating DRAFT release — boot-path change detected: $CHANGE_REASON"
-            BODY=/tmp/release-body.md
-            # Note: YAML's block-scalar strips the common leading indent,
-            # so by the time bash runs this heredoc the content is flush-left.
+            echo "Creating DRAFT rc release with boot-test checklist — $CHANGE_REASON"
             cat > "$BODY" <<EOF
+          ## Release candidate: ${RC_VERSION}
+
+          This is an rc draft. Promote to v${VERSION} by pushing tag \`v${VERSION}\`,
+          which triggers skopeo-copy of these images to \`:${VERSION}\` and \`:latest\`
+          and flips this draft to published.
+
           ## Pre-publish checklist — manual VM boot test required
 
           This release changes kernel or initramfs code (${CHANGE_REASON}).
-          Run the full VM boot smoke test before publishing:
+          Run the full VM boot smoke test before promoting:
 
           - [ ] Download the artifacts below to a KVM-capable host (e.g. droste VM 300).
           - [ ] Run \`scripts/yggdrasil-smoke-test.sh\` against them.
           - [ ] Confirm all 5 serial-console checkpoints pass (kernel start,
                 initramfs, systemd PID 1, default target, login prompt).
-          - [ ] Flip this draft release to published.
+          - [ ] Push tag \`v${VERSION}\` to promote this rc to a published release.
 
           ---
 
           EOF
-
-            # Append auto-generated notes via the API (works with or without a
-            # known previous tag — omit previous_tag_name if none).
-            if [[ -n "$PREV_TAG" ]]; then
-              gh api "/repos/${{ github.repository }}/releases/generate-notes" \
-                -f tag_name="$TAG" \
-                -f previous_tag_name="$PREV_TAG" \
-                --jq .body >> "$BODY"
-            else
-              gh api "/repos/${{ github.repository }}/releases/generate-notes" \
-                -f tag_name="$TAG" \
-                --jq .body >> "$BODY"
-            fi
-
-            gh release create "$TAG" \
-              --title "$TAG" \
-              --draft \
-              --notes-file "$BODY" \
-              "${ASSETS[@]}"
           else
-            echo "Creating PUBLISHED release — no boot-path changes"
-            gh release create "$TAG" \
-              --title "$TAG" \
-              --generate-notes \
-              "${ASSETS[@]}"
+            echo "Creating DRAFT rc release (no boot-path changes detected)"
+            cat > "$BODY" <<EOF
+          ## Release candidate: ${RC_VERSION}
+
+          This is an rc draft. Promote to v${VERSION} by pushing tag \`v${VERSION}\`,
+          which triggers skopeo-copy of these images to \`:${VERSION}\` and \`:latest\`
+          and flips this draft to published.
+
+          ---
+
+          EOF
           fi
 
+          # Append auto-generated notes via the API (works with or without a
+          # known previous tag — omit previous_tag_name if none).
+          if [[ -n "$PREV_TAG" ]]; then
+            gh api "/repos/${{ github.repository }}/releases/generate-notes" \
+              -f tag_name="$TAG" \
+              -f previous_tag_name="$PREV_TAG" \
+              --jq .body >> "$BODY"
+          else
+            gh api "/repos/${{ github.repository }}/releases/generate-notes" \
+              -f tag_name="$TAG" \
+              --jq .body >> "$BODY"
+          fi
+
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --draft \
+            --notes-file "$BODY" \
+            "${ASSETS[@]}"
+
       - name: Summary (workflow_dispatch)
-        if: steps.ver.outputs.is_tag_push != 'true'
+        if: steps.shape.outputs.is_dispatch == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -507,3 +572,123 @@ jobs:
             "build/canopy-${VERSION}.qcow2" \
             "build/canopy-${VERSION}-oci.tar" \
             "build/gemet-boot-${VERSION}-oci.tar"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # promote: runs ONLY on a release tag (vX.Y.Z, no rc suffix). No
+  # rebuild. Identifies the latest matching v<ver>-rc<n> tag, skopeo-
+  # copies each variant from :<ver>-rc<n> to :<ver> and :latest, then
+  # finds the existing draft release for the rc tag and edits it to
+  # tag=v<ver> with draft=false.
+  # ──────────────────────────────────────────────────────────────────────
+  promote:
+    name: Promote rc to release
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' && !contains(github.ref_name, '-rc')
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout (full history for rc tag lookup)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag shape
+        id: shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: promote job triggered for tag '${{ github.ref_name }}' which does not match v<ver>" >&2
+            echo "       (rc tags should land in build-and-rc; other tag shapes are unsupported)" >&2
+            exit 1
+          fi
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "TAG=$TAG"
+          echo "VERSION=$VERSION"
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Find latest matching rc tag
+        id: rc
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.shape.outputs.version }}"
+          # Pick the highest-numbered rc tag for this version using
+          # natural version sort. `git tag --list` reads from the local
+          # checkout, which is the source of truth — the rc tag had to
+          # exist (and trigger build-and-rc) before this release tag
+          # was pushed.
+          RC_TAG="$(git tag --list "v${VERSION}-rc*" | sort -V | tail -n1 || true)"
+          if [[ -z "$RC_TAG" ]]; then
+            echo "ERROR: v${VERSION} was tagged but no v${VERSION}-rc* exists; tag rc first" >&2
+            echo "       (push a tag like v${VERSION}-rc1 to build images, then push v${VERSION} to promote)" >&2
+            exit 1
+          fi
+          RC_VERSION="${RC_TAG#v}"
+          echo "RC_TAG=$RC_TAG"
+          echo "RC_VERSION=$RC_VERSION"
+          {
+            echo "rc_tag=$RC_TAG"
+            echo "rc_version=$RC_VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install skopeo
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends skopeo
+          command -v skopeo >/dev/null || { echo "ERROR: skopeo not found after install"; exit 1; }
+          skopeo --version
+
+      - name: Skopeo-copy rc images to release + latest tags
+        shell: bash
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.shape.outputs.version }}"
+          RC_VERSION="${{ steps.rc.outputs.rc_version }}"
+          # Auth: use GITHUB_TOKEN as both src and dst creds. ghcr.io
+          # accepts the actions token for read+write within the same
+          # repo's namespace (permissions: packages: write declared
+          # at workflow level).
+          CREDS="${GHCR_USER}:${GHCR_TOKEN}"
+          for variant in yggdrasil bifrost canopy boot; do
+            SRC="docker://ghcr.io/doctorjei/gemet/${variant}:${RC_VERSION}"
+            DST_VER="docker://ghcr.io/doctorjei/gemet/${variant}:${VERSION}"
+            DST_LATEST="docker://ghcr.io/doctorjei/gemet/${variant}:latest"
+            echo "── Promoting ${variant}: ${RC_VERSION} -> ${VERSION} + latest"
+            skopeo copy --all \
+              --src-creds "$CREDS" --dest-creds "$CREDS" \
+              "$SRC" "$DST_VER"
+            skopeo copy --all \
+              --src-creds "$CREDS" --dest-creds "$CREDS" \
+              "$SRC" "$DST_LATEST"
+          done
+
+      - name: Promote draft rc release to published v<ver>
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.shape.outputs.tag }}"
+          RC_TAG="${{ steps.rc.outputs.rc_tag }}"
+          # The rc job created a draft release named after the rc tag.
+          # Edit it: rename its tag to v<ver>, drop the draft flag.
+          # `gh release edit` operates on the existing release by its
+          # current tag name.
+          gh release view "$RC_TAG" >/dev/null \
+            || { echo "ERROR: no GitHub Release found for $RC_TAG (was the rc draft release deleted?)"; exit 1; }
+          gh release edit "$RC_TAG" \
+            --tag "$TAG" \
+            --title "$TAG" \
+            --draft=false
+          echo "Promoted draft release ${RC_TAG} -> published ${TAG}"
