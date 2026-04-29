@@ -540,9 +540,12 @@ else
                 STATUS_FILE="$DPKG_EXTRACT/var/lib/dpkg/status"
                 if [[ -f "$STATUS_FILE" ]]; then
                     pkgs=$(grep -c '^Package:' "$STATUS_FILE" 2>/dev/null || echo 0)
-                    # Canopy spike produced 187 — 180-195 range per plan.
-                    if (( pkgs < 180 || pkgs > 195 )); then
-                        bad+=" dpkg-count-${pkgs}-outside-180-195"
+                    # Canopy spike produced 187 (pre-1.6.0); v1.6.1 lands
+                    # near 196 after the python keep-list + EXTRA_INSTALL
+                    # additions. 180-205 gives modest headroom while still
+                    # catching catastrophic creep.
+                    if (( pkgs < 180 || pkgs > 205 )); then
+                        bad+=" dpkg-count-${pkgs}-outside-180-205"
                     fi
                 else
                     bad+=" dpkg-status-not-extracted"
@@ -608,8 +611,8 @@ else
                 bad+=" missing:/var/lib/dpkg/status"
             else
                 pkgs=$(grep -c '^Package:' "$DPKG_STATUS" 2>/dev/null || echo 0)
-                if (( pkgs < 180 || pkgs > 195 )); then
-                    bad+=" dpkg-count-${pkgs}-outside-180-195"
+                if (( pkgs < 180 || pkgs > 205 )); then
+                    bad+=" dpkg-count-${pkgs}-outside-180-205"
                 fi
             fi
 
