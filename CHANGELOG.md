@@ -4,6 +4,17 @@ All notable changes to Gemet are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); Gemet
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] — 2026-04-29
+
+### Fixed
+- v1.6.1's `EXTRA_INSTALL_PACKAGES` (python-is-python3,
+  python3-argcomplete, python3-requests + transitives) pushed
+  canopy's installed-package count from ~189 to 196, tripping
+  `scripts/ci-structural-tests.sh`'s 180-195 `dpkg-count` bounds
+  and failing Tier 1 — release pipeline never published v1.6.1.
+  Bump the upper bound to 205 in both check locations. v1.6.2
+  ships the artifacts v1.6.1 was meant to.
+
 ## [1.6.1] — 2026-04-29
 
 ### Fixed
