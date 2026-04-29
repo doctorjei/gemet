@@ -117,6 +117,16 @@ PHASE4_PURGE_PACKAGES=(
     python3-oauthlib python3-referencing python3-rpds-py
 )
 
+# Packages we want present in yggdrasil that are NOT in the Debian
+# genericcloud baseline. seed-target.txt is a keep-list (apt-mark
+# manual to defeat autoremove), not an install-list — items here
+# are apt-get install'd explicitly during Phase 0.
+EXTRA_INSTALL_PACKAGES=(
+    python-is-python3
+    python3-argcomplete
+    python3-requests
+)
+
 # ── Usage ───────────────────────────────────────────────────────────
 usage() {
     cat <<EOF
@@ -293,6 +303,7 @@ printf '%s\n' "${YGGDRASIL_STRIP_PACKAGES[@]}" > "$SCRATCH/ygg-strip-list.txt"
 printf '%s\n' "${BUSYBOX_SWAP_PACKAGES[@]}"    > "$SCRATCH/busybox-swap-list.txt"
 printf '%s\n' "${PHASE2_PURGE_PACKAGES[@]}"    > "$SCRATCH/phase2-purge-list.txt"
 printf '%s\n' "${PHASE4_PURGE_PACKAGES[@]}"    > "$SCRATCH/phase4-purge-list.txt"
+printf '%s\n' "${EXTRA_INSTALL_PACKAGES[@]}"   > "$SCRATCH/extra-install-list.txt"
 grep -v '^#' "$SEED_TARGET" | grep -v '^$'     > "$SCRATCH/seed-keep.txt"
 cp "$NETWORKD_CONF"                              "$SCRATCH/80-dhcp.network"
 
@@ -361,6 +372,7 @@ cp "\$SCRATCH/ygg-strip-list.txt"     "\$WORK_DIR/tmp/ygg-strip-list.txt"
 cp "\$SCRATCH/busybox-swap-list.txt"  "\$WORK_DIR/tmp/busybox-swap-list.txt"
 cp "\$SCRATCH/phase2-purge-list.txt"  "\$WORK_DIR/tmp/phase2-purge-list.txt"
 cp "\$SCRATCH/phase4-purge-list.txt"  "\$WORK_DIR/tmp/phase4-purge-list.txt"
+cp "\$SCRATCH/extra-install-list.txt"  "\$WORK_DIR/tmp/extra-install-list.txt"
 cp "\$SCRATCH/seed-keep.txt"          "\$WORK_DIR/tmp/seed-keep.txt"
 
 # ── Generate + run strip script inside chroot ───────────────────────
@@ -441,6 +453,13 @@ sed -i '/^# .*UTF-8/{
     /en_US\|zh_CN\|zh_TW\|hi_IN\|es_ES\|ar_SA\|fr_FR\|bn_IN\|pt_BR\|pt_PT\|id_ID\|ur_PK\|de_DE\|ja_JP\|ko_KR/s/^# //
 }' /etc/locale.gen
 locale-gen
+
+# Install seed-target items that aren't in the genericcloud baseline.
+# These won't show up via apt-mark manual alone (apt-mark only marks
+# already-installed packages); they need an explicit install.
+if [[ -s /tmp/extra-install-list.txt ]]; then
+    xargs apt-get install -y --no-install-recommends < /tmp/extra-install-list.txt
+fi
 
 if [[ "\${DO_SHRINK_INNER}" != "true" ]]; then
     echo "--no-shrink: skipping phases 1-4"
